@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice #{{invoice_number}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f4f6;">
+  <tr>
+    <td align="center" style="padding:40px 20px;">
+      <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="padding:36px 40px;border-bottom:1px solid #e5e7eb;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td>
+                  <p style="margin:0;font-size:22px;font-weight:800;color:#111827;">Acme Corp</p>
+                  <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">acme.io · billing@acme.io</p>
+                </td>
+                <td style="text-align:right;vertical-align:top;">
+                  <p style="margin:0;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Invoice</p>
+                  <p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#111827;">#{{invoice_number}}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Meta -->
+        <tr>
+          <td style="padding:24px 40px;border-bottom:1px solid #e5e7eb;background-color:#f9fafb;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="width:33%;vertical-align:top;">
+                  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Bill To</p>
+                  <p style="margin:0;font-size:14px;color:#111827;font-weight:600;">{{client_name}}</p>
+                  <p style="margin:2px 0 0;font-size:13px;color:#6b7280;">{{client_company}}</p>
+                  <p style="margin:2px 0 0;font-size:13px;color:#6b7280;">{{client_email}}</p>
+                </td>
+                <td style="width:33%;vertical-align:top;text-align:center;">
+                  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Issue Date</p>
+                  <p style="margin:0;font-size:14px;color:#374151;font-weight:600;">{{issue_date}}</p>
+                </td>
+                <td style="width:33%;vertical-align:top;text-align:right;">
+                  <p style="margin:0 0 4px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Due Date</p>
+                  <p style="margin:0;font-size:14px;color:#dc2626;font-weight:600;">{{due_date}}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Line items -->
+        <tr>
+          <td style="padding:28px 40px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <!-- Column headers -->
+              <tr style="border-bottom:2px solid #e5e7eb;">
+                <td style="padding-bottom:10px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Description</td>
+                <td style="padding-bottom:10px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;text-align:center;">Qty</td>
+                <td style="padding-bottom:10px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;text-align:right;">Unit Price</td>
+                <td style="padding-bottom:10px;font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;text-align:right;">Amount</td>
+              </tr>
+              <!-- Item rows -->
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:12px 0;font-size:14px;color:#374151;">{{line_1_desc}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:center;">{{line_1_qty}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:right;">{{line_1_unit}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#111827;text-align:right;font-weight:600;">{{line_1_total}}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:12px 0;font-size:14px;color:#374151;">{{line_2_desc}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:center;">{{line_2_qty}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:right;">{{line_2_unit}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#111827;text-align:right;font-weight:600;">{{line_2_total}}</td>
+              </tr>
+              <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:12px 0;font-size:14px;color:#374151;">{{line_3_desc}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:center;">{{line_3_qty}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#374151;text-align:right;">{{line_3_unit}}</td>
+                <td style="padding:12px 0;font-size:14px;color:#111827;text-align:right;font-weight:600;">{{line_3_total}}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Totals -->
+        <tr>
+          <td style="padding:0 40px 28px;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="width:60%;"></td>
+                <td style="width:40%;">
+                  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;">
+                    <tr>
+                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Subtotal</td>
+                      <td style="padding:6px 0;font-size:13px;color:#374151;text-align:right;">{{subtotal}}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Tax ({{tax_rate}}%)</td>
+                      <td style="padding:6px 0;font-size:13px;color:#374151;text-align:right;">{{tax_amount}}</td>
+                    </tr>
+                    <tr style="border-top:2px solid #111827;">
+                      <td style="padding:10px 0 0;font-size:16px;color:#111827;font-weight:700;">Total</td>
+                      <td style="padding:10px 0 0;font-size:18px;color:#111827;font-weight:800;text-align:right;">{{total_amount}}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Pay button -->
+        <tr>
+          <td style="padding:0 40px 36px;text-align:center;">
+            <a href="#" style="display:inline-block;background-color:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 44px;border-radius:6px;">Pay Now — {{total_amount}}</a>
+            <p style="margin:12px 0 0;font-size:12px;color:#9ca3af;">Payment due by {{due_date}} · Bank transfer or card accepted</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">Acme Corp · 123 Business Ave, San Francisco CA · <a href="#" style="color:#6b7280;text-decoration:none;">billing@acme.io</a></p>
+            <p style="margin:6px 0 0;font-size:11px;color:#d1d5db;">© 2026 Acme Corp · <a href="#" style="color:#d1d5db;text-decoration:none;">Unsubscribe</a></p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
