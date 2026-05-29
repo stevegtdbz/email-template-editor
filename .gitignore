@@ -29,6 +29,7 @@ MANIFEST
 
 # ── PyInstaller ───────────────────────────────────────────────────────────────
 *.spec
+!email_template_editor.spec
 
 # ── Qt / PyQt artefacts ───────────────────────────────────────────────────────
 *.qmlc
