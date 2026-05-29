@@ -1,78 +1,67 @@
 from pathlib import Path
+import json as _json
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFrame, QColorDialog,
+    QPushButton, QPlainTextEdit, QScrollArea,
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QUrl, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor
 from app import styles
 from app.widgets.code_editor import CodeEditor
 
+
+def _merge_css(base: str, override: str) -> str:
+    """Merge two inline-style strings; override properties win."""
+    def parse(css):
+        d = {}
+        for rule in css.split(';'):
+            rule = rule.strip()
+            if ':' in rule:
+                p, _, v = rule.partition(':')
+                k = p.strip().lower()
+                if k:
+                    d[k] = v.strip()
+        return d
+    merged = {**parse(base), **parse(override)}
+    return ('; '.join(f'{k}: {v}' for k, v in merged.items()) + ';') if merged else ''
+
+
 # ── Edit mode JS ──────────────────────────────────────────────────────────────
-# Injected when Edit Mode is active:
-#   • Floating in-page toolbar: element tag label + ✕ Delete button
-#   • Click → select element (red outline); Ctrl+Click → instant delete
-#   • contentEditable for text editing anywhere
-#   • Selection is tracked on mouseup/keyup so Python toolbar buttons
-#     can restore it after Qt steals focus (color dialog, button clicks)
 _EDIT_JS = """
 (function () {
     if (window.__editModeActive) return;
     window.__editModeActive = true;
 
-    // ── styles ───────────────────────────────────────────────────────────────
     var style = document.createElement('style');
     style.id = '__em_style__';
     style.textContent =
-        '.__em_hov { outline:2px solid rgba(79,70,229,.7) !important; outline-offset:2px !important; }' +
-        '.__em_sel { outline:2px solid rgba(220,38,38,.9) !important; outline-offset:2px !important; }';
+        '.__em_hov{outline:2px solid rgba(79,70,229,.7)!important;outline-offset:2px!important;}' +
+        '.__em_sel{outline:2px solid rgba(220,38,38,.9)!important;outline-offset:2px!important;}';
     document.head.appendChild(style);
 
-    // ── in-page delete toolbar ───────────────────────────────────────────────
-    var tb = document.createElement('div');
-    tb.id = '__em_tb__';
-    tb.style.cssText = [
-        'position:fixed;top:10px;right:10px;z-index:2147483647;',
-        'background:#1e1f22;border-radius:6px;padding:6px 10px;',
-        'display:flex;align-items:center;gap:10px;',
-        'box-shadow:0 2px 12px rgba(0,0,0,.55);font-family:Arial,sans-serif;',
-        'pointer-events:auto;user-select:none;'
-    ].join('');
-    var hint = document.createElement('span');
-    hint.style.cssText = 'color:#6b7280;font-size:11px;';
-    hint.textContent = 'Click element to select';
-    tb.appendChild(hint);
-    var delBtn = document.createElement('button');
-    delBtn.id = '__em_del__';
-    delBtn.textContent = '✕  Delete';
-    delBtn.style.cssText =
-        'background:#dc2626;color:white;border:none;border-radius:4px;' +
-        'padding:5px 12px;font-size:12px;cursor:pointer;' +
-        'opacity:.35;pointer-events:none;transition:opacity .15s;';
-    tb.appendChild(delBtn);
-    document.body.appendChild(tb);
-
-    // ── element selection ────────────────────────────────────────────────────
     document.body.contentEditable = 'true';
     var selected = null;
     var lastHov  = null;
+    var __seq    = 0;
+    window.__em_state = null;
 
     function setSelected(el) {
         if (selected) selected.classList.remove('__em_sel');
         selected = el;
         if (selected) {
             selected.classList.add('__em_sel');
-            hint.textContent = '<' + selected.tagName.toLowerCase() + '>';
-            delBtn.style.opacity = '1'; delBtn.style.pointerEvents = 'auto';
+            window.__em_state = {
+                tag:   selected.tagName.toLowerCase(),
+                style: selected.getAttribute('style') || '',
+                seq:   ++__seq
+            };
         } else {
-            hint.textContent = 'Click element to select';
-            delBtn.style.opacity = '.35'; delBtn.style.pointerEvents = 'none';
+            window.__em_state = null;
         }
     }
 
     document.addEventListener('mouseover', function (e) {
-        if (tb.contains(e.target)) return;
         if (lastHov && lastHov !== selected) lastHov.classList.remove('__em_hov');
         lastHov = e.target;
         if (lastHov !== selected) lastHov.classList.add('__em_hov');
@@ -81,81 +70,30 @@ _EDIT_JS = """
         if (e.target !== selected) e.target.classList.remove('__em_hov');
     });
     document.addEventListener('mousedown', function (e) {
-        if (tb.contains(e.target)) return;
         var tag = e.target.tagName;
         if (tag === 'BODY' || tag === 'HTML') return;
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault(); e.stopPropagation();
             if (selected === e.target) setSelected(null);
             e.target.remove();
-        } else { setSelected(e.target); }
-    }, true);
-    delBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (selected) { selected.remove(); setSelected(null); }
-    });
-
-    // ── selection tracking for Python format toolbar ──────────────────────────
-    // Saved on every mouseup / keyup so the range survives Qt focus changes
-    // (color dialog, toolbar button clicks).
-    function saveRange() {
-        var sel = window.getSelection();
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed)
-            window.__savedRange = sel.getRangeAt(0).cloneRange();
-    }
-    document.addEventListener('mouseup', saveRange);
-    document.addEventListener('keyup',   saveRange);
-
-    window.__restoreSel = function () {
-        if (!window.__savedRange) return false;
-        var sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(window.__savedRange);
-        return true;
-    };
-
-    // Bold / Italic / Underline — execCommand produces <b><i><u>,
-    // which are universally supported in email clients.
-    window.__fmt = function (cmd) {
-        window.__restoreSel();
-        document.execCommand(cmd);
-    };
-
-    // Text colour — wraps selection in <span style="color:X"> for
-    // maximum email-client compatibility (avoids <font color=""> fallback).
-    window.__applyColor = function (hex) {
-        if (!window.__restoreSel()) return;
-        var sel = window.getSelection();
-        if (!sel.rangeCount) return;
-        var range = sel.getRangeAt(0);
-        var span  = document.createElement('span');
-        span.style.color = hex;
-        try {
-            range.surroundContents(span);
-        } catch (_) {
-            // Selection crosses element boundaries; fall back to execCommand.
-            document.execCommand('foreColor', false, hex);
+        } else {
+            setSelected(e.target);
         }
-    };
+    }, true);
 
-    // Font size — wraps selection in <span style="font-size:Xpx">.
-    window.__applySize = function (px) {
-        if (!window.__restoreSel()) return;
-        var sel = window.getSelection();
-        if (!sel.rangeCount) return;
-        var range = sel.getRangeAt(0);
-        var span  = document.createElement('span');
-        span.style.fontSize = px + 'px';
-        try { range.surroundContents(span); } catch (_) {}
+    window.__updateSelectedStyle = function (css) {
+        if (!selected) return;
+        if (css.trim()) selected.setAttribute('style', css);
+        else            selected.removeAttribute('style');
     };
+    window.__deleteSelected  = function () {
+        if (selected) { selected.remove(); setSelected(null); }
+    };
+    window.__deselectElement = function () { setSelected(null); };
 
-    // ── Dirty tracking ───────────────────────────────────────────────────────
-    // Delayed so the toolbar/style DOM insertions above don't trip the flag.
     setTimeout(function () {
-        var _obs = new MutationObserver(function () {
-            document.title = '__dirty__';
-        });
-        _obs.observe(document.body, {
+        var obs = new MutationObserver(function () { document.title = '__dirty__'; });
+        obs.observe(document.body, {
             childList: true, subtree: true,
             characterData: true, attributes: true,
         });
@@ -163,40 +101,30 @@ _EDIT_JS = """
 })();
 """
 
-# Strips edit-mode artefacts before reading outerHTML for save.
 _CLEANUP_JS = """
 (function () {
-    var s = document.getElementById('__em_style__');  if (s)  s.remove();
-    var tb = document.getElementById('__em_tb__');    if (tb) tb.remove();
+    var s = document.getElementById('__em_style__'); if (s) s.remove();
     document.body.removeAttribute('contenteditable');
     document.querySelectorAll('.__em_hov,.__em_sel').forEach(function (el) {
         el.classList.remove('__em_hov', '__em_sel');
     });
     delete window.__editModeActive;
-    delete window.__savedRange;
+    delete window.__em_state;
+    delete window.__updateSelectedStyle;
+    delete window.__deleteSelected;
+    delete window.__deselectElement;
     return document.documentElement.outerHTML;
 })();
 """
 
-_BTN = """
+_ICON_BTN = """
     QPushButton {{
-        background:#2d2f34; color:{fg}; border:none;
-        border-radius:4px; min-width:{w}px; height:26px;
-        font-size:13px; font-weight:{fw}; font-style:{fi};
-        padding:0 8px;
+        background:#2d2f34; color:{fg}; border:1px solid #3c3f41;
+        border-radius:4px; font-size:12px;
     }}
-    QPushButton:hover   {{ background:#3f4147; }}
-    QPushButton:pressed {{ background:#4f46e5; color:white; }}
+    QPushButton:hover   {{ background:#3f4147; border-color:{hov}; color:{hfg}; }}
+    QPushButton:pressed {{ background:{hov}; color:white; }}
 """
-
-def _fmt_btn(label: str, bold=False, italic=False, width=30) -> QPushButton:
-    btn = QPushButton(label)
-    btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn.setStyleSheet(_BTN.format(
-        fg="white", fw="bold" if bold else "normal",
-        fi="italic" if italic else "normal", w=width,
-    ))
-    return btn
 
 
 class PreviewPane(QWidget):
@@ -212,23 +140,43 @@ class PreviewPane(QWidget):
         self._edit_mode  = False
         self._code_mode  = False
         self._dirty      = False
-        self._last_color = QColor("#000000")
+        self._last_em_seq = -1
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        layout.addWidget(self._build_header_bar())
-        layout.addWidget(self._build_format_bar())   # hidden until Edit Mode
+        # ── Left pane ─────────────────────────────────────────────────────────
+        left = QWidget()
+        lv = QVBoxLayout(left)
+        lv.setContentsMargins(0, 0, 0, 0)
+        lv.setSpacing(0)
+        lv.addWidget(self._build_header_bar())
 
         self._view = QWebEngineView()
         self._view.loadFinished.connect(self._on_load_finished)
         self._view.page().titleChanged.connect(self._on_page_title_changed)
-        layout.addWidget(self._view)
+        lv.addWidget(self._view)
 
         self._code_editor = CodeEditor()
         self._code_editor.setVisible(False)
-        layout.addWidget(self._code_editor)
+        lv.addWidget(self._code_editor)
+
+        root.addWidget(left, 1)
+
+        # ── Right pane: style editor + style sets manager ─────────────────────
+        root.addWidget(self._build_element_editor())
+
+        # JS selection polling (50 ms)
+        self._poll_timer = QTimer()
+        self._poll_timer.setInterval(50)
+        self._poll_timer.timeout.connect(self._poll_selection)
+
+        # Debounce for live style pushes
+        self._style_push_timer = QTimer()
+        self._style_push_timer.setSingleShot(True)
+        self._style_push_timer.setInterval(120)
+        self._style_push_timer.timeout.connect(self._push_style_to_element)
 
     # ── Bar builders ──────────────────────────────────────────────────────────
 
@@ -295,71 +243,150 @@ class PreviewPane(QWidget):
         lay.addWidget(self._edit_btn)
         return bar
 
-    def _build_format_bar(self) -> QWidget:
-        self._format_bar = QWidget()
-        self._format_bar.setFixedHeight(36)
-        self._format_bar.setVisible(False)
-        self._format_bar.setStyleSheet(
-            f"background:#25272b; border-bottom:1px solid #3c3f41;"
+    def _build_element_editor(self) -> QWidget:
+        self._element_editor = QWidget()
+        self._element_editor.setFixedWidth(280)
+        self._element_editor.setVisible(False)
+        self._element_editor.setStyleSheet(
+            f"background:{styles.BG_DARK}; border-left:1px solid #3c3f41;"
         )
-        lay = QHBoxLayout(self._format_bar)
-        lay.setContentsMargins(10, 0, 10, 0)
-        lay.setSpacing(4)
 
-        # B / I / U
-        b = _fmt_btn("B", bold=True)
-        b.setToolTip("Bold (email-safe <b>)")
-        b.clicked.connect(lambda: self._fmt("bold"))
-        lay.addWidget(b)
+        outer = QVBoxLayout(self._element_editor)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        i = _fmt_btn("I", italic=True)
-        i.setToolTip("Italic (email-safe <i>)")
-        i.clicked.connect(lambda: self._fmt("italic"))
-        lay.addWidget(i)
+        # ── Header ─────────────────────────────────────────────────────────────
+        hdr = QWidget()
+        hdr.setFixedHeight(38)
+        hdr.setStyleSheet("background:#25272b; border-bottom:1px solid #3c3f41;")
+        hl = QHBoxLayout(hdr)
+        hl.setContentsMargins(12, 0, 8, 0)
 
-        u = _fmt_btn("U", width=30)
-        u.setStyleSheet(u.styleSheet() + "QPushButton { text-decoration:underline; }")
-        u.setToolTip("Underline (email-safe <u>)")
-        u.clicked.connect(lambda: self._fmt("underline"))
-        lay.addWidget(u)
+        self._elem_tag_label = QLabel("Style Editor")
+        self._elem_tag_label.setStyleSheet(
+            "color:#a5b4fc; font-size:13px; font-family:monospace; font-weight:bold;"
+            "background:#25272b;"
+        )
+        hl.addWidget(self._elem_tag_label)
+        hl.addStretch()
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("color:#3c3f41;")
-        sep.setFixedWidth(1)
-        lay.addWidget(sep)
+        desel_btn = QPushButton("✕")
+        desel_btn.setFixedSize(24, 24)
+        desel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        desel_btn.setToolTip("Deselect element")
+        desel_btn.setStyleSheet(
+            "QPushButton{background:transparent;color:#6b7280;border:none;font-size:14px;}"
+            "QPushButton:hover{color:#e5e7eb;background:transparent;}"
+        )
+        desel_btn.clicked.connect(self._deselect_element)
+        hl.addWidget(desel_btn)
+        outer.addWidget(hdr)
 
-        # Font size
-        for label, px in [("S", 12), ("M", 16), ("L", 20), ("XL", 26)]:
-            btn = _fmt_btn(label, width=28)
-            btn.setToolTip(f"Font size {px}px (inline style)")
-            btn.clicked.connect(lambda _, p=px: self._apply_size(p))
-            lay.addWidget(btn)
+        # ── Scrollable body ────────────────────────────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            f"QScrollBar:vertical{{background:{styles.BG_DARK};width:6px;border:none;}}"
+            "QScrollBar::handle:vertical{background:#3c3f41;border-radius:3px;min-height:20px;}"
+            "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+        )
 
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.VLine)
-        sep2.setStyleSheet("color:#3c3f41;")
-        sep2.setFixedWidth(1)
-        lay.addWidget(sep2)
+        body = QWidget()
+        body.setStyleSheet(f"background:{styles.BG_DARK};")
+        bl = QVBoxLayout(body)
+        bl.setContentsMargins(12, 12, 12, 12)
+        bl.setSpacing(10)
 
-        # Color swatch button
-        self._color_btn = QPushButton()
-        self._color_btn.setFixedSize(52, 26)
-        self._color_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._color_btn.setToolTip("Text colour (inline style)")
-        self._color_btn.clicked.connect(self._pick_color)
-        self._refresh_color_btn()
-        lay.addWidget(self._color_btn)
+        # ── Inline style section (shown only when element is selected) ─────────
+        self._inline_style_section = QWidget()
+        self._inline_style_section.setStyleSheet(f"background:{styles.BG_DARK};")
+        self._inline_style_section.setVisible(False)
+        ils = QVBoxLayout(self._inline_style_section)
+        ils.setContentsMargins(0, 0, 0, 0)
+        ils.setSpacing(6)
+        ils.addWidget(self._section_label("INLINE STYLE"))
 
-        lay.addStretch()
+        self._inline_style_editor = QPlainTextEdit()
+        self._inline_style_editor.setMinimumHeight(90)
+        self._inline_style_editor.setMaximumHeight(200)
+        self._inline_style_editor.setPlaceholderText("e.g. color: red; font-size: 16px;")
+        self._inline_style_editor.setStyleSheet("""
+            QPlainTextEdit {
+                background:#1a1b1e; color:#e5e7eb;
+                border:1px solid #3c3f41; border-radius:4px;
+                font-family:monospace; font-size:12px; padding:6px;
+                selection-background-color:#4f46e5;
+            }
+            QPlainTextEdit:focus { border-color:#4f46e5; }
+        """)
+        self._inline_style_editor.textChanged.connect(
+            lambda: self._style_push_timer.start()
+        )
+        ils.addWidget(self._inline_style_editor)
+        bl.addWidget(self._inline_style_section)
 
-        hint = QLabel("Select text then click a style")
-        hint.setStyleSheet("color:#4b5563; font-size:11px;")
-        lay.addWidget(hint)
+        # ── Style sets section (always visible in edit mode) ────────────────────
+        sets_hdr = QWidget()
+        sets_hdr.setStyleSheet(f"background:{styles.BG_DARK};")
+        sh = QHBoxLayout(sets_hdr)
+        sh.setContentsMargins(0, 0, 0, 0)
+        sh.setSpacing(4)
+        sh.addWidget(self._section_label("STYLE SETS"))
+        sh.addStretch()
 
-        return self._format_bar
+        add_set_btn = QPushButton("+ New")
+        add_set_btn.setFixedHeight(20)
+        add_set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_set_btn.setStyleSheet("""
+            QPushButton {
+                background:#2d2f34; color:#a5b4fc; border:1px solid #3c3f41;
+                border-radius:3px; padding:0 8px; font-size:11px;
+            }
+            QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
+            QPushButton:pressed { background:#4f46e5; color:white; }
+        """)
+        add_set_btn.clicked.connect(self._add_style_set)
+        sh.addWidget(add_set_btn)
+        bl.addWidget(sets_hdr)
 
-    # ── Shared button style helper ─────────────────────────────────────────────
+        self._elem_sets_container = QWidget()
+        self._elem_sets_container.setStyleSheet(f"background:{styles.BG_DARK};")
+        self._elem_sets_layout = QVBoxLayout(self._elem_sets_container)
+        self._elem_sets_layout.setContentsMargins(0, 0, 0, 0)
+        self._elem_sets_layout.setSpacing(4)
+        bl.addWidget(self._elem_sets_container)
+
+        bl.addStretch()
+
+        # Delete element button (only when element is selected)
+        self._delete_elem_btn = QPushButton("Delete Element")
+        self._delete_elem_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_elem_btn.setVisible(False)
+        self._delete_elem_btn.setStyleSheet("""
+            QPushButton {
+                background:#7f1d1d; color:#fca5a5;
+                border:1px solid #991b1b; border-radius:4px;
+                padding:7px; font-size:13px;
+            }
+            QPushButton:hover   { background:#991b1b; color:white; }
+            QPushButton:pressed { background:#b91c1c; }
+        """)
+        self._delete_elem_btn.clicked.connect(self._delete_selected_element)
+        bl.addWidget(self._delete_elem_btn)
+
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        return self._element_editor
+
+    @staticmethod
+    def _section_label(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color:#4b5563; font-size:10px; font-weight:bold; letter-spacing:1px;"
+        )
+        return lbl
 
     @staticmethod
     def _action_btn(label: str, bg: str, fg: str, border: str = "transparent") -> QPushButton:
@@ -382,6 +409,10 @@ class PreviewPane(QWidget):
         self._title.setText(path.name)
         self._merge_btn.setVisible(self._guide_path is not None)
         self._send_btn_bar.setVisible(True)
+        self._last_em_seq = -1
+        self._inline_style_section.setVisible(False)
+        self._delete_elem_btn.setVisible(False)
+        self._elem_tag_label.setText("Style Editor")
         if self._code_mode:
             self._code_editor.setPlainText(path.read_text(encoding="utf-8"))
         else:
@@ -392,6 +423,9 @@ class PreviewPane(QWidget):
         self._view.setHtml("")
         self._title.setText("Select a template")
         self._send_btn_bar.setVisible(False)
+        self._element_editor.setVisible(False)
+        self._inline_style_section.setVisible(False)
+        self._delete_elem_btn.setVisible(False)
 
     def set_guide_path(self, path: Path | None) -> None:
         self._guide_path = path
@@ -407,7 +441,6 @@ class PreviewPane(QWidget):
         return self._dirty
 
     def save(self, on_done: callable = None) -> None:
-        """Save current file. Calls on_done() when complete (async-safe)."""
         if not self._current_path:
             if on_done:
                 on_done()
@@ -423,7 +456,7 @@ class PreviewPane(QWidget):
                     on_done()
             self._view.page().runJavaScript(_CLEANUP_JS, _cb)
 
-    # ── Internals ─────────────────────────────────────────────────────────────
+    # ── Page events ───────────────────────────────────────────────────────────
 
     def _on_page_title_changed(self, title: str) -> None:
         if title == '__dirty__':
@@ -438,71 +471,224 @@ class PreviewPane(QWidget):
         if ok and self._edit_mode:
             self._view.page().runJavaScript(_EDIT_JS)
 
+    # ── Mode toggles ──────────────────────────────────────────────────────────
+
     def _toggle_code_mode(self, enabled: bool) -> None:
         self._code_mode = enabled
         self._view.setVisible(not enabled)
         self._code_editor.setVisible(enabled)
         self._save_btn.setVisible(enabled or self._edit_mode)
-        self._format_bar.setVisible(self._edit_mode and not enabled)
 
-        # Code mode and Edit mode are mutually exclusive
         self._edit_btn.setEnabled(not enabled)
         if enabled and self._edit_mode:
             self._edit_btn.setChecked(False)
 
         if enabled and self._current_path:
-            html = self._current_path.read_text(encoding="utf-8")
-            self._code_editor.setPlainText(html)
+            self._code_editor.setPlainText(
+                self._current_path.read_text(encoding="utf-8")
+            )
             self.status_message.emit("Code mode — editing raw HTML source")
         elif not enabled and self._current_path:
-            # Apply code editor content back to the web view
             html = self._code_editor.toPlainText()
-            self._view.setHtml(html, QUrl.fromLocalFile(str(self._current_path.parent) + "/"))
+            self._view.setHtml(
+                html, QUrl.fromLocalFile(str(self._current_path.parent) + "/")
+            )
             self.status_message.emit(str(self._current_path))
 
     def _toggle_edit_mode(self, enabled: bool) -> None:
         self._edit_mode = enabled
         self._save_btn.setVisible(enabled or self._code_mode)
-        self._format_bar.setVisible(enabled and not self._code_mode)
+        if enabled:
+            self._elem_tag_label.setText("Style Editor")
+            self._inline_style_section.setVisible(False)
+            self._delete_elem_btn.setVisible(False)
+            self._element_editor.setVisible(True)
+            self._refresh_element_style_sets()
+            self._poll_timer.start()
+        else:
+            self._poll_timer.stop()
+            self._element_editor.setVisible(False)
+            self._inline_style_section.setVisible(False)
+            self._delete_elem_btn.setVisible(False)
+            self._last_em_seq = -1
         if not self._current_path:
             return
         if enabled:
             self._view.page().runJavaScript(_EDIT_JS)
             self.status_message.emit(
-                "Edit mode ON — select text for formatting, click elements to delete"
+                "Edit mode ON — click any element to edit its inline style"
             )
         else:
             self._view.load(QUrl.fromLocalFile(str(self._current_path)))
             self.status_message.emit(str(self._current_path))
 
-    # ── Formatting ────────────────────────────────────────────────────────────
+    # ── JS selection polling ──────────────────────────────────────────────────
 
-    def _fmt(self, cmd: str) -> None:
-        self._view.page().runJavaScript(f"window.__fmt('{cmd}')")
+    def _poll_selection(self) -> None:
+        self._view.page().runJavaScript(
+            "JSON.stringify(window.__em_state || null)",
+            self._handle_em_state,
+        )
 
-    def _apply_size(self, px: int) -> None:
-        self._view.page().runJavaScript(f"window.__applySize({px})")
+    def _handle_em_state(self, json_str: str) -> None:
+        if not json_str or json_str == 'null':
+            if self._inline_style_section.isVisible():
+                self._inline_style_section.setVisible(False)
+                self._delete_elem_btn.setVisible(False)
+                self._elem_tag_label.setText("Style Editor")
+            self._last_em_seq = -1
+            return
+        try:
+            state = _json.loads(json_str)
+        except Exception:
+            return
+        seq = state.get('seq', 0)
+        if seq == self._last_em_seq:
+            return
+        self._last_em_seq = seq
+        self._show_element_style(state.get('tag', '?'), state.get('style', ''))
 
-    def _pick_color(self) -> None:
-        # Save current selection before Qt opens the color dialog
-        self._view.page().runJavaScript("window.__restoreSel && window.__restoreSel()")
-        color = QColorDialog.getColor(self._last_color, self, "Pick text colour")
-        if color.isValid():
-            self._last_color = color
-            self._refresh_color_btn()
-            self._view.page().runJavaScript(f"window.__applyColor('{color.name()}')")
+    def _show_element_style(self, tag: str, style: str) -> None:
+        self._elem_tag_label.setText(f"<{tag}>")
+        self._inline_style_editor.blockSignals(True)
+        self._inline_style_editor.setPlainText(style)
+        self._inline_style_editor.blockSignals(False)
+        self._refresh_element_style_sets()
+        self._inline_style_section.setVisible(True)
+        self._delete_elem_btn.setVisible(True)
 
-    def _refresh_color_btn(self) -> None:
-        c = self._last_color.name()
-        fg = "#ffffff" if self._last_color.lightness() < 128 else "#000000"
-        self._color_btn.setStyleSheet(f"""
-            QPushButton {{
-                background:{c}; color:{fg}; border:1px solid #555;
-                border-radius:4px; font-size:11px; font-weight:bold;
-            }}
-            QPushButton:hover {{ border-color:#aaa; }}
-        """)
-        self._color_btn.setText(c.upper())
+    def _deselect_element(self) -> None:
+        self._inline_style_section.setVisible(False)
+        self._delete_elem_btn.setVisible(False)
+        self._elem_tag_label.setText("Style Editor")
+        self._last_em_seq = -1
+        self._view.page().runJavaScript(
+            "window.__deselectElement && window.__deselectElement()"
+        )
+
+    # ── Live style push ───────────────────────────────────────────────────────
+
+    def _push_style_to_element(self) -> None:
+        css = self._inline_style_editor.toPlainText()
+        css_e = css.replace("\\", "\\\\").replace("'", "\\'")
+        self._view.page().runJavaScript(
+            f"window.__updateSelectedStyle && window.__updateSelectedStyle('{css_e}')"
+        )
+
+    # ── Style sets ────────────────────────────────────────────────────────────
+
+    def _refresh_element_style_sets(self) -> None:
+        from app import style_store
+        while self._elem_sets_layout.count():
+            item = self._elem_sets_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        sets = style_store.load()
+        if not sets:
+            lbl = QLabel("No style sets yet — click + New to add one")
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("color:#4b5563; font-size:11px; font-style:italic;")
+            self._elem_sets_layout.addWidget(lbl)
+            return
+
+        for i, s in enumerate(sets):
+            row = QWidget()
+            row.setStyleSheet(f"background:{styles.BG_DARK};")
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(3)
+
+            apply_btn = QPushButton(s["name"])
+            apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            apply_btn.setToolTip(s["value"])
+            apply_btn.setStyleSheet("""
+                QPushButton {
+                    background:#2d2f34; color:#a5b4fc;
+                    border:1px solid #3c3f41; border-radius:4px;
+                    padding:5px 8px; font-size:12px; text-align:left;
+                }
+                QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
+                QPushButton:pressed { background:#4f46e5; color:white; }
+            """)
+            apply_btn.clicked.connect(
+                lambda _, css=s["value"]: self._apply_style_set_to_element(css)
+            )
+            rl.addWidget(apply_btn, 1)
+
+            edit_btn = QPushButton("✎")
+            edit_btn.setFixedSize(26, 26)
+            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            edit_btn.setToolTip("Edit style set")
+            edit_btn.setStyleSheet(
+                _ICON_BTN.format(fg="#9ca3af", hov="#4f46e5", hfg="#e5e7eb")
+            )
+            edit_btn.clicked.connect(lambda _, idx=i: self._edit_style_set_at(idx))
+            rl.addWidget(edit_btn)
+
+            del_btn = QPushButton("✕")
+            del_btn.setFixedSize(26, 26)
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            del_btn.setToolTip("Delete style set")
+            del_btn.setStyleSheet(
+                _ICON_BTN.format(fg="#f87171", hov="#991b1b", hfg="#fca5a5")
+            )
+            del_btn.clicked.connect(lambda _, idx=i: self._delete_style_set_at(idx))
+            rl.addWidget(del_btn)
+
+            self._elem_sets_layout.addWidget(row)
+
+    def _apply_style_set_to_element(self, css: str) -> None:
+        current = self._inline_style_editor.toPlainText().strip()
+        merged = _merge_css(current, css)
+        self._inline_style_editor.blockSignals(True)
+        self._inline_style_editor.setPlainText(merged)
+        self._inline_style_editor.blockSignals(False)
+        css_e = merged.replace("\\", "\\\\").replace("'", "\\'")
+        self._view.page().runJavaScript(
+            f"window.__updateSelectedStyle && window.__updateSelectedStyle('{css_e}')"
+        )
+
+    def _delete_selected_element(self) -> None:
+        self._inline_style_section.setVisible(False)
+        self._delete_elem_btn.setVisible(False)
+        self._elem_tag_label.setText("Style Editor")
+        self._last_em_seq = -1
+        self._view.page().runJavaScript(
+            "window.__deleteSelected && window.__deleteSelected()"
+        )
+
+    def _add_style_set(self) -> None:
+        from app import style_store
+        from app.widgets.style_sets_dialog import StyleSetDialog
+        dlg = StyleSetDialog(parent=self)
+        if dlg.exec() and dlg.style_name:
+            sets = style_store.load()
+            sets.append({"name": dlg.style_name, "value": dlg.style_value})
+            style_store.save(sets)
+            self._refresh_element_style_sets()
+
+    def _edit_style_set_at(self, idx: int) -> None:
+        from app import style_store
+        from app.widgets.style_sets_dialog import StyleSetDialog
+        sets = style_store.load()
+        if idx >= len(sets):
+            return
+        s = sets[idx]
+        dlg = StyleSetDialog(name=s["name"], value=s["value"], parent=self)
+        if dlg.exec() and dlg.style_name:
+            sets[idx] = {"name": dlg.style_name, "value": dlg.style_value}
+            style_store.save(sets)
+            self._refresh_element_style_sets()
+
+    def _delete_style_set_at(self, idx: int) -> None:
+        from app import style_store
+        sets = style_store.load()
+        if idx >= len(sets):
+            return
+        sets.pop(idx)
+        style_store.save(sets)
+        self._refresh_element_style_sets()
 
     # ── Save ──────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from app import styles
-from app.email_sender import SmtpConfig, SendWorker, OUTLOOK_AVAILABLE
+from app.email_sender import SmtpConfig, SendWorker, OUTLOOK_AVAILABLE, load_last_to, save_last_to
 from app.widgets.smtp_settings_dialog import SmtpSettingsDialog
 
 
@@ -57,7 +57,7 @@ class SendDialog(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(10)
 
-        self._to = QLineEdit()
+        self._to = QLineEdit(load_last_to())
         self._to.setPlaceholderText("recipient@example.com, another@example.com")
         self._to.setStyleSheet(field_style)
         form.addRow("To:", self._to)
@@ -200,6 +200,7 @@ class SendDialog(QDialog):
         self._worker.start()
 
     def _on_success(self) -> None:
+        save_last_to(self._to.text().strip())
         self._set_status("Email sent successfully ✓", error=False, color="#34d399")
         self._send_btn.setText("Sent ✓")
 

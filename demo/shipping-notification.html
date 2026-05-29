@@ -1,47 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Your Order Has Shipped</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guide Template</title>
+  <style>
+    body { margin:0; padding:0; background:#f4f6f9; font-family:Arial,sans-serif; }
+    a    { color:#4f46e5; }
+  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f0f4f8;">
+<body>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
   <tr>
-    <td align="center" style="padding:40px 20px;">
-      <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+    <td align="center">
+      <table width="620" cellpadding="0" cellspacing="0"
+             style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 
-        <!-- Header -->
+
+        <!-- SECTION:HEADER -->
         <tr>
-          <td style="background-color:#1a56db;padding:36px 40px;text-align:center;">
-            <p style="margin:0;font-size:13px;color:#93c5fd;letter-spacing:2px;text-transform:uppercase;font-weight:600;">ShopFlow</p>
-            <h1 style="margin:12px 0 0;font-size:28px;color:#ffffff;font-weight:700;">Your order is on its way!</h1>
+          <td style="background:#4f46e5;padding:32px 40px;text-align:center;">
+            <img src="https://placehold.co/160x40/ffffff/4f46e5?text=LOGO"
+                 alt="Company Logo" width="160" style="display:block;margin:0 auto 16px;" />
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.3px;">
+              Email Title Goes Here
+            </h1>
+            <p style="margin:8px 0 0;color:#c7d2fe;font-size:13px;">
+              Optional subtitle or date
+            </p>
           </td>
         </tr>
+        <!-- /SECTION:HEADER -->
 
-        <!-- Truck icon row -->
-        <tr>
+
+        <!-- SECTION:CONTENT -->
+<tr class="">
           <td style="background-color:#eff6ff;padding:28px 40px;text-align:center;border-bottom:1px solid #dbeafe;">
             <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
-              <tr>
-                <td style="font-size:48px;line-height:1;">&#128666;</td>
+              <tbody><tr class="">
+                <td style="font-size:48px;line-height:1;">🚚</td>
               </tr>
-              <tr>
+              <tr class="">
                 <td style="padding-top:12px;font-size:15px;color:#1e40af;font-weight:600;">Estimated delivery: <span style="color:#1a56db;">Thursday, June 5</span></td>
               </tr>
-            </table>
+            </tbody></table>
           </td>
         </tr>
-
-        <!-- Body -->
-        <tr>
+<tr class="">
           <td style="padding:36px 40px;">
             <p style="margin:0 0 6px;font-size:15px;color:#6b7280;">Hi {{first_name}},</p>
             <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">Great news — your order <strong style="color:#111827;">#{{order_number}}</strong> has been picked up by the carrier and is heading your way.</p>
 
             <!-- Tracking box -->
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:28px;">
-              <tr>
+              <tbody><tr>
                 <td style="padding:20px 24px;">
                   <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Tracking Number</p>
                   <p style="margin:0 0 16px;font-size:18px;color:#111827;font-weight:700;letter-spacing:1px;">{{tracking_number}}</p>
@@ -49,14 +61,14 @@
                   <p style="margin:0;font-size:15px;color:#374151;">{{carrier_name}}</p>
                 </td>
               </tr>
-            </table>
+            </tbody></table>
 
             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
-              <tr>
+              <tbody><tr>
                 <td style="padding-bottom:16px;">
                   <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:0.5px;">Items Shipped</p>
                   <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                    <tr style="border-bottom:1px solid #f3f4f6;">
+                    <tbody><tr style="border-bottom:1px solid #f3f4f6;">
                       <td style="padding:10px 0;font-size:14px;color:#374151;">{{item_1_name}} <span style="color:#9ca3af;">× {{item_1_qty}}</span></td>
                       <td style="padding:10px 0;font-size:14px;color:#111827;text-align:right;font-weight:600;">{{item_1_price}}</td>
                     </tr>
@@ -64,42 +76,65 @@
                       <td style="padding:10px 0;font-size:14px;color:#374151;">{{item_2_name}} <span style="color:#9ca3af;">× {{item_2_qty}}</span></td>
                       <td style="padding:10px 0;font-size:14px;color:#111827;text-align:right;font-weight:600;">{{item_2_price}}</td>
                     </tr>
-                  </table>
+                  </tbody></table>
                 </td>
               </tr>
-            </table>
+            </tbody></table>
 
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
-              <tr>
+              <tbody><tr>
                 <td align="center">
                   <a href="#" style="display:inline-block;background-color:#1a56db;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:6px;">Track Your Package</a>
                 </td>
               </tr>
-            </table>
+            </tbody></table>
           </td>
         </tr>
+        <!-- /SECTION:CONTENT -->
 
-        <!-- Delivery address -->
+
+        <!-- SECTION:PREFOOTER -->
         <tr>
-          <td style="padding:0 40px 36px;">
-            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border-left:3px solid #1a56db;padding:16px 20px;">
+          <td style="background:#f9fafb;padding:24px 40px;border-top:1px solid #e5e7eb;">
+            <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td style="padding:16px 20px;">
-                  <p style="margin:0 0 4px;font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Delivering to</p>
-                  <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">{{delivery_name}}<br>{{delivery_address}}<br>{{delivery_city}}, {{delivery_postcode}}</p>
+                <td style="font-size:13px;color:#6b7280;line-height:1.6;">
+                  <strong style="color:#374151;">Why am I receiving this?</strong><br />
+                  You're receiving this email because you signed up for updates from Acme Inc.
+                  You can manage your preferences below.
+                </td>
+                <td align="right" valign="top" style="white-space:nowrap;padding-left:24px;">
+                  <a href="{{preferences_url}}"
+                     style="font-size:12px;color:#6b7280;text-decoration:underline;">
+                    Manage preferences
+                  </a>
                 </td>
               </tr>
             </table>
           </td>
         </tr>
+        <!-- /SECTION:PREFOOTER -->
 
-        <!-- Footer -->
+
+        <!-- SECTION:FOOTER -->
         <tr>
-          <td style="background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center;">
-            <p style="margin:0 0 8px;font-size:12px;color:#9ca3af;">Questions? <a href="#" style="color:#1a56db;text-decoration:none;">Contact Support</a></p>
-            <p style="margin:0;font-size:11px;color:#d1d5db;">© 2026 ShopFlow Inc. · <a href="#" style="color:#d1d5db;text-decoration:none;">Unsubscribe</a></p>
+          <td style="background:#1e1f22;padding:24px 40px;text-align:center;border-radius:0 0 8px 8px;">
+            <p style="margin:0 0 12px;">
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Privacy Policy</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Terms of Service</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Contact Us</a>
+            </p>
+            <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">
+              Acme Inc. · 123 Market Street · San Francisco, CA 94105
+            </p>
+            <p style="margin:0;font-size:12px;color:#6b7280;">
+              © 2026 Acme Inc. All rights reserved. ·
+              <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+            </p>
           </td>
         </tr>
+        <!-- /SECTION:FOOTER -->
+
 
       </table>
     </td>

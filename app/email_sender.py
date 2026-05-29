@@ -18,6 +18,28 @@ from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 
 _CONFIG_PATH = Path.home() / ".config" / "email-templates-tool" / "smtp.json"
+_PREFS_PATH  = Path.home() / ".config" / "email-templates-tool" / "prefs.json"
+
+
+def load_last_to() -> str:
+    if not _PREFS_PATH.exists():
+        return ""
+    try:
+        return json.loads(_PREFS_PATH.read_text(encoding="utf-8")).get("last_to", "")
+    except Exception:
+        return ""
+
+
+def save_last_to(to: str) -> None:
+    _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    prefs: dict = {}
+    if _PREFS_PATH.exists():
+        try:
+            prefs = json.loads(_PREFS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    prefs["last_to"] = to
+    _PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────

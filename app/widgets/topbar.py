@@ -10,7 +10,9 @@ class TopBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(48)
-        self.setStyleSheet(f"background:{styles.BG_MID};")
+        # setAutoFillBackground is required for background to paint on Windows
+        self.setAutoFillBackground(True)
+        self.setStyleSheet(f"TopBar {{ background:{styles.BG_MID}; }}")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 0, 14, 0)

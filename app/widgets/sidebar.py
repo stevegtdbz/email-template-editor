@@ -47,9 +47,9 @@ class Sidebar(QWidget):
 
     def load_folder(self, folder: Path) -> int:
         self._list.clear()
-        files = sorted(folder.glob("*.html"))
+        files = sorted(folder.rglob("*.html"))
         for f in files:
-            item = QListWidgetItem(f.name)
+            item = QListWidgetItem(str(f.relative_to(folder)))
             item.setData(Qt.ItemDataRole.UserRole, f)
             self._list.addItem(item)
         return len(files)

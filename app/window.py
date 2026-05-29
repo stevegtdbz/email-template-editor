@@ -1,6 +1,6 @@
 from pathlib import Path
 from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QMessageBox
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from app import styles
 from app.widgets.topbar import TopBar
 from app.widgets.sidebar import Sidebar
@@ -16,7 +16,6 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1100, 700)
         self._guide_path: Path | None = None
         self._setup_ui()
-        QTimer.singleShot(0, self._browse_folder)
 
     def _setup_ui(self) -> None:
         central = QWidget()
