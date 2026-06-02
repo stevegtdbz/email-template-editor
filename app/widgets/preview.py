@@ -3,12 +3,22 @@ import json as _json
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QPlainTextEdit, QScrollArea,
+    QPushButton, QPlainTextEdit, QScrollArea, QFrame,
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QUrl, QTimer, pyqtSignal
 from app import styles
 from app.widgets.code_editor import CodeEditor
+
+
+def _build_class_css(c: dict) -> str:
+    """Build the complete CSS block for a class entry (base + @media rules)."""
+    name = c["name"]
+    parts = [f".{name} {{ {c['css']} }}"]
+    for m in c.get("media", []):
+        if m.get("query") and m.get("css"):
+            parts.append(f"@media ({m['query']}) {{ .{name} {{ {m['css']} }} }}")
+    return "\n".join(parts)
 
 
 def _merge_css(base: str, override: str) -> str:
@@ -52,9 +62,12 @@ _EDIT_JS = """
         if (selected) {
             selected.classList.add('__em_sel');
             window.__em_state = {
-                tag:   selected.tagName.toLowerCase(),
-                style: selected.getAttribute('style') || '',
-                seq:   ++__seq
+                tag:     selected.tagName.toLowerCase(),
+                style:   selected.getAttribute('style') || '',
+                classes: Array.from(selected.classList).filter(function(c) {
+                    return c !== '__em_hov' && c !== '__em_sel';
+                }),
+                seq: ++__seq
             };
         } else {
             window.__em_state = null;
@@ -81,11 +94,35 @@ _EDIT_JS = """
         }
     }, true);
 
+    // ── Inline style ─────────────────────────────────────────────────────────
     window.__updateSelectedStyle = function (css) {
         if (!selected) return;
         if (css.trim()) selected.setAttribute('style', css);
         else            selected.removeAttribute('style');
     };
+
+    // ── CSS class toggle ─────────────────────────────────────────────────────
+    // fullCss is the complete CSS block (base rule + @media rules), built by Python.
+    // The <style> tag is saved with the file; only the class attribute is toggled.
+    // Returns true if added, false if removed, null if no element is selected.
+    window.__toggleClass = function (className, fullCss) {
+        if (!selected) return null;
+        if (selected.classList.contains(className)) {
+            selected.classList.remove(className);
+            return false;
+        }
+        var sid = '__emc_' + className + '__';
+        var sEl = document.getElementById(sid);
+        if (!sEl) {
+            sEl = document.createElement('style');
+            sEl.id = sid;
+            document.head.appendChild(sEl);
+        }
+        sEl.textContent = fullCss;
+        selected.classList.add(className);
+        return true;
+    };
+
     window.__deleteSelected  = function () {
         if (selected) { selected.remove(); setSelected(null); }
     };
@@ -111,6 +148,7 @@ _CLEANUP_JS = """
     delete window.__editModeActive;
     delete window.__em_state;
     delete window.__updateSelectedStyle;
+    delete window.__toggleClass;
     delete window.__deleteSelected;
     delete window.__deselectElement;
     return document.documentElement.outerHTML;
@@ -124,6 +162,37 @@ _ICON_BTN = """
     }}
     QPushButton:hover   {{ background:#3f4147; border-color:{hov}; color:{hfg}; }}
     QPushButton:pressed {{ background:{hov}; color:white; }}
+"""
+
+_CLASS_BTN_OFF = """
+    QPushButton {
+        background:#2d2f34; color:#a5b4fc;
+        border:1px solid #3c3f41; border-radius:4px;
+        padding:5px 8px; font-size:12px; text-align:left;
+    }
+    QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
+    QPushButton:pressed { background:#4f46e5; color:white; }
+"""
+
+_CLASS_BTN_ON = """
+    QPushButton {
+        background:#1e3a5f; color:#93c5fd;
+        border:1px solid #2563eb; border-radius:4px;
+        padding:5px 8px; font-size:12px; text-align:left;
+        font-weight:bold;
+    }
+    QPushButton:hover   { background:#1e40af; border-color:#3b82f6; }
+    QPushButton:pressed { background:#1d4ed8; }
+"""
+
+_APPLY_BTN = """
+    QPushButton {
+        background:#2d2f34; color:#a5b4fc;
+        border:1px solid #3c3f41; border-radius:4px;
+        padding:5px 8px; font-size:12px; text-align:left;
+    }
+    QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
+    QPushButton:pressed { background:#4f46e5; color:white; }
 """
 
 
@@ -141,6 +210,8 @@ class PreviewPane(QWidget):
         self._code_mode  = False
         self._dirty      = False
         self._last_em_seq = -1
+        self._current_elem_classes: set[str] = set()
+        self._class_buttons: dict[str, QPushButton] = {}
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -164,7 +235,7 @@ class PreviewPane(QWidget):
 
         root.addWidget(left, 1)
 
-        # ── Right pane: style editor + style sets manager ─────────────────────
+        # ── Right pane ────────────────────────────────────────────────────────
         root.addWidget(self._build_element_editor())
 
         # JS selection polling (50 ms)
@@ -178,7 +249,7 @@ class PreviewPane(QWidget):
         self._style_push_timer.setInterval(120)
         self._style_push_timer.timeout.connect(self._push_style_to_element)
 
-    # ── Bar builders ──────────────────────────────────────────────────────────
+    # ── Header bar ────────────────────────────────────────────────────────────
 
     def _build_header_bar(self) -> QWidget:
         bar = QWidget()
@@ -243,6 +314,8 @@ class PreviewPane(QWidget):
         lay.addWidget(self._edit_btn)
         return bar
 
+    # ── Element editor panel ──────────────────────────────────────────────────
+
     def _build_element_editor(self) -> QWidget:
         self._element_editor = QWidget()
         self._element_editor.setFixedWidth(280)
@@ -255,7 +328,7 @@ class PreviewPane(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── Header ─────────────────────────────────────────────────────────────
+        # Header
         hdr = QWidget()
         hdr.setFixedHeight(38)
         hdr.setStyleSheet("background:#25272b; border-bottom:1px solid #3c3f41;")
@@ -282,7 +355,7 @@ class PreviewPane(QWidget):
         hl.addWidget(desel_btn)
         outer.addWidget(hdr)
 
-        # ── Scrollable body ────────────────────────────────────────────────────
+        # Scrollable body
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -299,7 +372,7 @@ class PreviewPane(QWidget):
         bl.setContentsMargins(12, 12, 12, 12)
         bl.setSpacing(10)
 
-        # ── Inline style section (shown only when element is selected) ─────────
+        # ── Inline style (shown when element is selected) ─────────────────────
         self._inline_style_section = QWidget()
         self._inline_style_section.setStyleSheet(f"background:{styles.BG_DARK};")
         self._inline_style_section.setVisible(False)
@@ -309,8 +382,8 @@ class PreviewPane(QWidget):
         ils.addWidget(self._section_label("INLINE STYLE"))
 
         self._inline_style_editor = QPlainTextEdit()
-        self._inline_style_editor.setMinimumHeight(90)
-        self._inline_style_editor.setMaximumHeight(200)
+        self._inline_style_editor.setMinimumHeight(80)
+        self._inline_style_editor.setMaximumHeight(160)
         self._inline_style_editor.setPlaceholderText("e.g. color: red; font-size: 16px;")
         self._inline_style_editor.setStyleSheet("""
             QPlainTextEdit {
@@ -327,29 +400,15 @@ class PreviewPane(QWidget):
         ils.addWidget(self._inline_style_editor)
         bl.addWidget(self._inline_style_section)
 
-        # ── Style sets section (always visible in edit mode) ────────────────────
-        sets_hdr = QWidget()
-        sets_hdr.setStyleSheet(f"background:{styles.BG_DARK};")
-        sh = QHBoxLayout(sets_hdr)
-        sh.setContentsMargins(0, 0, 0, 0)
-        sh.setSpacing(4)
-        sh.addWidget(self._section_label("STYLE SETS"))
-        sh.addStretch()
+        # ── Divider ───────────────────────────────────────────────────────────
+        self._sidebar_divider = QFrame()
+        self._sidebar_divider.setFrameShape(QFrame.Shape.HLine)
+        self._sidebar_divider.setStyleSheet("color:#3c3f41;")
+        self._sidebar_divider.setVisible(False)
+        bl.addWidget(self._sidebar_divider)
 
-        add_set_btn = QPushButton("+ New")
-        add_set_btn.setFixedHeight(20)
-        add_set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_set_btn.setStyleSheet("""
-            QPushButton {
-                background:#2d2f34; color:#a5b4fc; border:1px solid #3c3f41;
-                border-radius:3px; padding:0 8px; font-size:11px;
-            }
-            QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
-            QPushButton:pressed { background:#4f46e5; color:white; }
-        """)
-        add_set_btn.clicked.connect(self._add_style_set)
-        sh.addWidget(add_set_btn)
-        bl.addWidget(sets_hdr)
+        # ── Style sets section (always visible in edit mode) ──────────────────
+        bl.addWidget(self._build_section_header("STYLE SETS", self._add_style_set))
 
         self._elem_sets_container = QWidget()
         self._elem_sets_container.setStyleSheet(f"background:{styles.BG_DARK};")
@@ -358,9 +417,24 @@ class PreviewPane(QWidget):
         self._elem_sets_layout.setSpacing(4)
         bl.addWidget(self._elem_sets_container)
 
+        # ── CSS classes section (always visible in edit mode) ─────────────────
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color:#3c3f41;")
+        bl.addWidget(sep)
+
+        bl.addWidget(self._build_section_header("CSS CLASSES", self._add_css_class))
+
+        self._css_classes_container = QWidget()
+        self._css_classes_container.setStyleSheet(f"background:{styles.BG_DARK};")
+        self._css_classes_layout = QVBoxLayout(self._css_classes_container)
+        self._css_classes_layout.setContentsMargins(0, 0, 0, 0)
+        self._css_classes_layout.setSpacing(4)
+        bl.addWidget(self._css_classes_container)
+
         bl.addStretch()
 
-        # Delete element button (only when element is selected)
+        # Delete element button (shown when element is selected)
         self._delete_elem_btn = QPushButton("Delete Element")
         self._delete_elem_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._delete_elem_btn.setVisible(False)
@@ -379,6 +453,30 @@ class PreviewPane(QWidget):
         scroll.setWidget(body)
         outer.addWidget(scroll)
         return self._element_editor
+
+    def _build_section_header(self, title: str, on_add) -> QWidget:
+        """Reusable section header row with a '+ New' button."""
+        row = QWidget()
+        row.setStyleSheet(f"background:{styles.BG_DARK};")
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(4)
+        rl.addWidget(self._section_label(title))
+        rl.addStretch()
+        add_btn = QPushButton("+ New")
+        add_btn.setFixedHeight(20)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background:#2d2f34; color:#a5b4fc; border:1px solid #3c3f41;
+                border-radius:3px; padding:0 8px; font-size:11px;
+            }
+            QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
+            QPushButton:pressed { background:#4f46e5; color:white; }
+        """)
+        add_btn.clicked.connect(on_add)
+        rl.addWidget(add_btn)
+        return row
 
     @staticmethod
     def _section_label(text: str) -> QLabel:
@@ -410,7 +508,9 @@ class PreviewPane(QWidget):
         self._merge_btn.setVisible(self._guide_path is not None)
         self._send_btn_bar.setVisible(True)
         self._last_em_seq = -1
+        self._current_elem_classes.clear()
         self._inline_style_section.setVisible(False)
+        self._sidebar_divider.setVisible(False)
         self._delete_elem_btn.setVisible(False)
         self._elem_tag_label.setText("Style Editor")
         if self._code_mode:
@@ -425,7 +525,9 @@ class PreviewPane(QWidget):
         self._send_btn_bar.setVisible(False)
         self._element_editor.setVisible(False)
         self._inline_style_section.setVisible(False)
+        self._sidebar_divider.setVisible(False)
         self._delete_elem_btn.setVisible(False)
+        self._current_elem_classes.clear()
 
     def set_guide_path(self, path: Path | None) -> None:
         self._guide_path = path
@@ -501,22 +603,27 @@ class PreviewPane(QWidget):
         if enabled:
             self._elem_tag_label.setText("Style Editor")
             self._inline_style_section.setVisible(False)
+            self._sidebar_divider.setVisible(False)
             self._delete_elem_btn.setVisible(False)
+            self._current_elem_classes.clear()
             self._element_editor.setVisible(True)
-            self._refresh_element_style_sets()
+            self._refresh_style_sets()
+            self._refresh_css_classes()
             self._poll_timer.start()
         else:
             self._poll_timer.stop()
             self._element_editor.setVisible(False)
             self._inline_style_section.setVisible(False)
+            self._sidebar_divider.setVisible(False)
             self._delete_elem_btn.setVisible(False)
+            self._current_elem_classes.clear()
             self._last_em_seq = -1
         if not self._current_path:
             return
         if enabled:
             self._view.page().runJavaScript(_EDIT_JS)
             self.status_message.emit(
-                "Edit mode ON — click any element to edit its inline style"
+                "Edit mode ON — click any element to edit its style"
             )
         else:
             self._view.load(QUrl.fromLocalFile(str(self._current_path)))
@@ -534,8 +641,11 @@ class PreviewPane(QWidget):
         if not json_str or json_str == 'null':
             if self._inline_style_section.isVisible():
                 self._inline_style_section.setVisible(False)
+                self._sidebar_divider.setVisible(False)
                 self._delete_elem_btn.setVisible(False)
                 self._elem_tag_label.setText("Style Editor")
+                self._current_elem_classes.clear()
+                self._refresh_css_classes()
             self._last_em_seq = -1
             return
         try:
@@ -546,21 +656,31 @@ class PreviewPane(QWidget):
         if seq == self._last_em_seq:
             return
         self._last_em_seq = seq
-        self._show_element_style(state.get('tag', '?'), state.get('style', ''))
+        self._show_element_style(
+            state.get('tag', '?'),
+            state.get('style', ''),
+            state.get('classes', []),
+        )
 
-    def _show_element_style(self, tag: str, style: str) -> None:
+    def _show_element_style(self, tag: str, style: str, classes: list) -> None:
         self._elem_tag_label.setText(f"<{tag}>")
         self._inline_style_editor.blockSignals(True)
         self._inline_style_editor.setPlainText(style)
         self._inline_style_editor.blockSignals(False)
-        self._refresh_element_style_sets()
+        self._current_elem_classes = set(classes)
+        self._refresh_style_sets()
+        self._refresh_css_classes()
         self._inline_style_section.setVisible(True)
+        self._sidebar_divider.setVisible(True)
         self._delete_elem_btn.setVisible(True)
 
     def _deselect_element(self) -> None:
         self._inline_style_section.setVisible(False)
+        self._sidebar_divider.setVisible(False)
         self._delete_elem_btn.setVisible(False)
         self._elem_tag_label.setText("Style Editor")
+        self._current_elem_classes.clear()
+        self._refresh_css_classes()
         self._last_em_seq = -1
         self._view.page().runJavaScript(
             "window.__deselectElement && window.__deselectElement()"
@@ -577,68 +697,27 @@ class PreviewPane(QWidget):
 
     # ── Style sets ────────────────────────────────────────────────────────────
 
-    def _refresh_element_style_sets(self) -> None:
+    def _refresh_style_sets(self) -> None:
         from app import style_store
-        while self._elem_sets_layout.count():
-            item = self._elem_sets_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        self._clear_layout(self._elem_sets_layout)
 
         sets = style_store.load()
         if not sets:
-            lbl = QLabel("No style sets yet — click + New to add one")
-            lbl.setWordWrap(True)
-            lbl.setStyleSheet("color:#4b5563; font-size:11px; font-style:italic;")
-            self._elem_sets_layout.addWidget(lbl)
+            self._elem_sets_layout.addWidget(self._placeholder("No style sets yet — click + New"))
             return
 
         for i, s in enumerate(sets):
-            row = QWidget()
-            row.setStyleSheet(f"background:{styles.BG_DARK};")
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(0, 0, 0, 0)
-            rl.setSpacing(3)
-
-            apply_btn = QPushButton(s["name"])
-            apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            apply_btn.setToolTip(s["value"])
-            apply_btn.setStyleSheet("""
-                QPushButton {
-                    background:#2d2f34; color:#a5b4fc;
-                    border:1px solid #3c3f41; border-radius:4px;
-                    padding:5px 8px; font-size:12px; text-align:left;
-                }
-                QPushButton:hover   { background:#3f4147; border-color:#4f46e5; }
-                QPushButton:pressed { background:#4f46e5; color:white; }
-            """)
-            apply_btn.clicked.connect(
-                lambda _, css=s["value"]: self._apply_style_set_to_element(css)
+            row = self._make_item_row(
+                label=s["name"],
+                tooltip=s["value"],
+                on_apply=lambda _, css=s["value"]: self._apply_style_set(css),
+                on_edit=lambda _, idx=i: self._edit_style_set_at(idx),
+                on_delete=lambda _, idx=i: self._delete_style_set_at(idx),
+                apply_style=_APPLY_BTN,
             )
-            rl.addWidget(apply_btn, 1)
-
-            edit_btn = QPushButton("✎")
-            edit_btn.setFixedSize(26, 26)
-            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            edit_btn.setToolTip("Edit style set")
-            edit_btn.setStyleSheet(
-                _ICON_BTN.format(fg="#9ca3af", hov="#4f46e5", hfg="#e5e7eb")
-            )
-            edit_btn.clicked.connect(lambda _, idx=i: self._edit_style_set_at(idx))
-            rl.addWidget(edit_btn)
-
-            del_btn = QPushButton("✕")
-            del_btn.setFixedSize(26, 26)
-            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            del_btn.setToolTip("Delete style set")
-            del_btn.setStyleSheet(
-                _ICON_BTN.format(fg="#f87171", hov="#991b1b", hfg="#fca5a5")
-            )
-            del_btn.clicked.connect(lambda _, idx=i: self._delete_style_set_at(idx))
-            rl.addWidget(del_btn)
-
             self._elem_sets_layout.addWidget(row)
 
-    def _apply_style_set_to_element(self, css: str) -> None:
+    def _apply_style_set(self, css: str) -> None:
         current = self._inline_style_editor.toPlainText().strip()
         merged = _merge_css(current, css)
         self._inline_style_editor.blockSignals(True)
@@ -649,15 +728,6 @@ class PreviewPane(QWidget):
             f"window.__updateSelectedStyle && window.__updateSelectedStyle('{css_e}')"
         )
 
-    def _delete_selected_element(self) -> None:
-        self._inline_style_section.setVisible(False)
-        self._delete_elem_btn.setVisible(False)
-        self._elem_tag_label.setText("Style Editor")
-        self._last_em_seq = -1
-        self._view.page().runJavaScript(
-            "window.__deleteSelected && window.__deleteSelected()"
-        )
-
     def _add_style_set(self) -> None:
         from app import style_store
         from app.widgets.style_sets_dialog import StyleSetDialog
@@ -666,7 +736,7 @@ class PreviewPane(QWidget):
             sets = style_store.load()
             sets.append({"name": dlg.style_name, "value": dlg.style_value})
             style_store.save(sets)
-            self._refresh_element_style_sets()
+            self._refresh_style_sets()
 
     def _edit_style_set_at(self, idx: int) -> None:
         from app import style_store
@@ -679,7 +749,7 @@ class PreviewPane(QWidget):
         if dlg.exec() and dlg.style_name:
             sets[idx] = {"name": dlg.style_name, "value": dlg.style_value}
             style_store.save(sets)
-            self._refresh_element_style_sets()
+            self._refresh_style_sets()
 
     def _delete_style_set_at(self, idx: int) -> None:
         from app import style_store
@@ -688,7 +758,209 @@ class PreviewPane(QWidget):
             return
         sets.pop(idx)
         style_store.save(sets)
-        self._refresh_element_style_sets()
+        self._refresh_style_sets()
+
+    # ── CSS classes ───────────────────────────────────────────────────────────
+
+    def _refresh_css_classes(self) -> None:
+        from app import style_store
+        self._class_buttons.clear()
+        self._clear_layout(self._css_classes_layout)
+
+        classes = style_store.load_classes()
+        if not classes:
+            self._css_classes_layout.addWidget(
+                self._placeholder("No classes yet — click + New")
+            )
+            return
+
+        elem_selected = self._inline_style_section.isVisible()
+
+        for i, c in enumerate(classes):
+            name = c["name"]
+            applied = name in self._current_elem_classes
+
+            full_css = _build_class_css(c)
+            mq_count = len(c.get("media", []))
+            tip = full_css if mq_count == 0 else f"{c['css']}\n+ {mq_count} media rule(s)"
+
+            apply_btn = QPushButton(
+                f"✓ .{name}" if applied else f".{name}"
+            )
+            apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            apply_btn.setToolTip(tip)
+            apply_btn.setStyleSheet(_CLASS_BTN_ON if applied else _CLASS_BTN_OFF)
+            apply_btn.setEnabled(elem_selected)
+            apply_btn.clicked.connect(
+                lambda _, n=name, fc=full_css, b=apply_btn: self._toggle_class_on_element(n, fc, b)
+            )
+            self._class_buttons[name] = apply_btn
+
+            edit_btn = QPushButton("✎")
+            edit_btn.setFixedSize(26, 26)
+            edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            edit_btn.setToolTip("Edit class")
+            edit_btn.setStyleSheet(
+                _ICON_BTN.format(fg="#9ca3af", hov="#4f46e5", hfg="#e5e7eb")
+            )
+            edit_btn.clicked.connect(lambda _, idx=i: self._edit_css_class_at(idx))
+
+            del_btn = QPushButton("✕")
+            del_btn.setFixedSize(26, 26)
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            del_btn.setToolTip("Delete class")
+            del_btn.setStyleSheet(
+                _ICON_BTN.format(fg="#f87171", hov="#991b1b", hfg="#fca5a5")
+            )
+            del_btn.clicked.connect(lambda _, idx=i: self._delete_css_class_at(idx))
+
+            row = QWidget()
+            row.setStyleSheet(f"background:{styles.BG_DARK};")
+            rl = QHBoxLayout(row)
+            rl.setContentsMargins(0, 0, 0, 0)
+            rl.setSpacing(3)
+            rl.addWidget(apply_btn, 1)
+            rl.addWidget(edit_btn)
+            rl.addWidget(del_btn)
+            self._css_classes_layout.addWidget(row)
+
+    def _toggle_class_on_element(self, name: str, full_css: str, btn: QPushButton) -> None:
+        self._view.page().runJavaScript(
+            f"window.__toggleClass && window.__toggleClass("
+            f"{_json.dumps(name)}, {_json.dumps(full_css)})",
+            lambda applied: self._on_class_toggled(name, applied, btn),
+        )
+
+    def _on_class_toggled(self, name: str, applied, btn: QPushButton) -> None:
+        if applied is None:
+            return  # no element selected
+        if applied:
+            self._current_elem_classes.add(name)
+            btn.setText(f"✓ .{name}")
+            btn.setStyleSheet(_CLASS_BTN_ON)
+        else:
+            self._current_elem_classes.discard(name)
+            btn.setText(f".{name}")
+            btn.setStyleSheet(_CLASS_BTN_OFF)
+
+    def _add_css_class(self) -> None:
+        from app import style_store
+        from app.widgets.css_class_dialog import CssClassDialog
+        dlg = CssClassDialog(parent=self)
+        if dlg.exec() and dlg.class_name:
+            classes = style_store.load_classes()
+            classes.append({
+                "name": dlg.class_name,
+                "css":  dlg.class_css,
+                "media": dlg.media_rules,
+            })
+            style_store.save_classes(classes)
+            self._refresh_css_classes()
+
+    def _edit_css_class_at(self, idx: int) -> None:
+        from app import style_store
+        from app.widgets.css_class_dialog import CssClassDialog
+        classes = style_store.load_classes()
+        if idx >= len(classes):
+            return
+        c = classes[idx]
+        dlg = CssClassDialog(
+            name=c["name"],
+            css=c.get("css", ""),
+            media=c.get("media", []),
+            parent=self,
+        )
+        if dlg.exec() and dlg.class_name:
+            classes[idx] = {
+                "name":  dlg.class_name,
+                "css":   dlg.class_css,
+                "media": dlg.media_rules,
+            }
+            style_store.save_classes(classes)
+            self._refresh_css_classes()
+
+    def _delete_css_class_at(self, idx: int) -> None:
+        from app import style_store
+        classes = style_store.load_classes()
+        if idx >= len(classes):
+            return
+        classes.pop(idx)
+        style_store.save_classes(classes)
+        self._refresh_css_classes()
+
+    # ── Element deletion ──────────────────────────────────────────────────────
+
+    def _delete_selected_element(self) -> None:
+        self._inline_style_section.setVisible(False)
+        self._sidebar_divider.setVisible(False)
+        self._delete_elem_btn.setVisible(False)
+        self._elem_tag_label.setText("Style Editor")
+        self._current_elem_classes.clear()
+        self._refresh_css_classes()
+        self._last_em_seq = -1
+        self._view.page().runJavaScript(
+            "window.__deleteSelected && window.__deleteSelected()"
+        )
+
+    # ── Layout helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _clear_layout(layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    @staticmethod
+    def _placeholder(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("color:#4b5563; font-size:11px; font-style:italic;")
+        return lbl
+
+    @staticmethod
+    def _make_item_row(
+        label: str,
+        tooltip: str,
+        on_apply,
+        on_edit,
+        on_delete,
+        apply_style: str,
+    ) -> QWidget:
+        row = QWidget()
+        row.setStyleSheet(f"background:{styles.BG_DARK};")
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(3)
+
+        apply_btn = QPushButton(label)
+        apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        apply_btn.setToolTip(tooltip)
+        apply_btn.setStyleSheet(apply_style)
+        apply_btn.clicked.connect(on_apply)
+        rl.addWidget(apply_btn, 1)
+
+        edit_btn = QPushButton("✎")
+        edit_btn.setFixedSize(26, 26)
+        edit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        edit_btn.setToolTip("Edit")
+        edit_btn.setStyleSheet(
+            _ICON_BTN.format(fg="#9ca3af", hov="#4f46e5", hfg="#e5e7eb")
+        )
+        edit_btn.clicked.connect(on_edit)
+        rl.addWidget(edit_btn)
+
+        del_btn = QPushButton("✕")
+        del_btn.setFixedSize(26, 26)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setToolTip("Delete")
+        del_btn.setStyleSheet(
+            _ICON_BTN.format(fg="#f87171", hov="#991b1b", hfg="#fca5a5")
+        )
+        del_btn.clicked.connect(on_delete)
+        rl.addWidget(del_btn)
+
+        return row
 
     # ── Save ──────────────────────────────────────────────────────────────────
 

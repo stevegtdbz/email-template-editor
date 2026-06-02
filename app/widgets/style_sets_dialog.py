@@ -6,11 +6,20 @@ from app import styles
 
 
 class StyleSetDialog(QDialog):
-    """Add or edit a single style set."""
+    """Add or edit a single style set or CSS class (reused for both)."""
 
-    def __init__(self, name: str = "", value: str = "", parent=None):
+    def __init__(
+        self,
+        name: str = "",
+        value: str = "",
+        title: str = "Style Set",
+        name_label: str = "Name:",
+        value_label: str = "CSS:",
+        placeholder: str = "e.g. font-family:Arial;font-size:34px;color:#333;",
+        parent=None,
+    ):
         super().__init__(parent)
-        self.setWindowTitle("Style Set")
+        self.setWindowTitle(title)
         self.setMinimumWidth(440)
         self.setStyleSheet(f"""
             QDialog       {{ background:{styles.BG_MID}; }}
@@ -33,15 +42,13 @@ class StyleSetDialog(QDialog):
 
         self._name_edit = QLineEdit(name)
         self._name_edit.setPlaceholderText("e.g. myh1")
-        form.addRow("Name:", self._name_edit)
+        form.addRow(name_label, self._name_edit)
 
         self._value_edit = QPlainTextEdit(value)
-        self._value_edit.setPlaceholderText(
-            "e.g. font-family:Arial;font-size:34px;color:#333;"
-        )
+        self._value_edit.setPlaceholderText(placeholder)
         self._value_edit.setMinimumHeight(80)
         self._value_edit.setMaximumHeight(140)
-        form.addRow("CSS:", self._value_edit)
+        form.addRow(value_label, self._value_edit)
 
         layout.addLayout(form)
 
