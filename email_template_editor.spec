@@ -11,7 +11,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('guide-template.html', '.'),
+        ('guides', 'guides'),
         ('demo', 'demo'),
     ],
     hiddenimports=[
