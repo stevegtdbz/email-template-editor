@@ -21,16 +21,16 @@ _CONFIG_PATH = Path.home() / ".config" / "email-templates-tool" / "smtp.json"
 _PREFS_PATH  = Path.home() / ".config" / "email-templates-tool" / "prefs.json"
 
 
-def load_last_to() -> str:
+def _load_pref(key: str, default: str = "") -> str:
     if not _PREFS_PATH.exists():
-        return ""
+        return default
     try:
-        return json.loads(_PREFS_PATH.read_text(encoding="utf-8")).get("last_to", "")
+        return json.loads(_PREFS_PATH.read_text(encoding="utf-8")).get(key, default)
     except Exception:
-        return ""
+        return default
 
 
-def save_last_to(to: str) -> None:
+def _save_pref(key: str, value: str) -> None:
     _PREFS_PATH.parent.mkdir(parents=True, exist_ok=True)
     prefs: dict = {}
     if _PREFS_PATH.exists():
@@ -38,8 +38,14 @@ def save_last_to(to: str) -> None:
             prefs = json.loads(_PREFS_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
-    prefs["last_to"] = to
+    prefs[key] = value
     _PREFS_PATH.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
+
+
+def load_last_to()       -> str: return _load_pref("last_to")
+def save_last_to(v: str) -> None: _save_pref("last_to", v)
+def load_last_via()      -> str: return _load_pref("last_via", "smtp")
+def save_last_via(v: str)-> None: _save_pref("last_via", v)
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────

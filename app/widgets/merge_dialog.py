@@ -1,7 +1,7 @@
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QSplitter, QWidget,
+    QPushButton, QSplitter, QWidget, QComboBox,
 )
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
@@ -109,20 +109,19 @@ def _panel(label_text: str) -> tuple[QWidget, QWebEngineView]:
 
 class MergeDialog(QDialog):
     """Two-panel dialog: left = source template (click rows to select),
-    right = live merge preview using the guide template."""
+    right = live merge preview using the selected guide template."""
 
     merged = pyqtSignal(Path)
 
-    def __init__(self, source_path: Path, guide_path: Path, parent=None):
+    def __init__(self, source_path: Path, guide_paths: list, parent=None):
         super().__init__(parent)
-        self._source_path = source_path
-        self._guide_path  = guide_path
-        self._guide_html  = guide_path.read_text(encoding='utf-8')
+        self._source_path  = source_path
+        self._guide_paths  = list(guide_paths)
+        self._guide_path   = self._guide_paths[0]
+        self._guide_html   = self._guide_path.read_text(encoding='utf-8')
         self._merged_html: str | None = None
 
-        self.setWindowTitle(
-            f"Merge  ·  {source_path.name}  →  {guide_path.name}"
-        )
+        self.setWindowTitle(f"Merge  ·  {source_path.name}")
         self.resize(1400, 820)
         self._setup_ui()
         self._load_views()
@@ -154,7 +153,31 @@ class MergeDialog(QDialog):
         arrow = QLabel("→")
         arrow.setStyleSheet(f"color:{styles.TEXT_MUTED};font-size:14px;")
         il.addWidget(arrow)
-        il.addWidget(_chip(f"Guide: {self._guide_path.name}", "#1e3a5f"))
+
+        guide_lbl = QLabel("Guide:")
+        guide_lbl.setStyleSheet(f"color:{styles.TEXT_MUTED};font-size:12px;")
+        il.addWidget(guide_lbl)
+
+        self._guide_combo = QComboBox()
+        self._guide_combo.setStyleSheet("""
+            QComboBox {
+                background:#1e3a5f; color:#93c5fd;
+                border:1px solid #2563eb; border-radius:4px;
+                padding:3px 10px; font-size:12px; min-width:180px;
+            }
+            QComboBox:hover { background:#1e40af; color:white; }
+            QComboBox::drop-down { border:none; width:20px; }
+            QComboBox QAbstractItemView {
+                background:#1e2433; color:#93c5fd;
+                selection-background-color:#1e40af;
+                border:1px solid #2563eb;
+            }
+        """)
+        for p in self._guide_paths:
+            self._guide_combo.addItem(p.name, p)
+        self._guide_combo.currentIndexChanged.connect(self._on_guide_changed)
+        il.addWidget(self._guide_combo)
+
         il.addStretch()
 
         hint = QLabel("Click rows on the left to select · Preview updates on right")
@@ -216,6 +239,21 @@ class MergeDialog(QDialog):
         bl.addWidget(self._merge_btn)
 
         root.addWidget(bottom)
+
+    # ── Guide selection ───────────────────────────────────────────────────────
+
+    def _on_guide_changed(self, index: int) -> None:
+        self._guide_path = self._guide_combo.itemData(index)
+        self._guide_html = self._guide_path.read_text(encoding='utf-8')
+        self._merged_html = None
+        self._merge_btn.setEnabled(False)
+        self._status.setText("Click rows in the source template to select sections")
+        # Refresh preview with new guide baseline and re-apply any current selection
+        self._preview_view.load(QUrl.fromLocalFile(str(self._guide_path)))
+        self._source_view.page().runJavaScript(
+            'window.__getSelected ? window.__getSelected() : []',
+            self._update_preview,
+        )
 
     # ── Load ──────────────────────────────────────────────────────────────────
 

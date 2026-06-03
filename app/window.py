@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Email Template Batch Update Tool")
         self.setMinimumSize(1100, 700)
-        self._guide_path: Path | None = None
+        self._guide_paths: list[Path] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -26,7 +26,7 @@ class MainWindow(QMainWindow):
 
         self._topbar = TopBar()
         self._topbar.open_folder_requested.connect(self._browse_folder)
-        self._topbar.load_guide_requested.connect(self._load_guide)
+        self._topbar.load_guide_folder_requested.connect(self._load_guide_folder)
         root.addWidget(self._topbar)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -68,17 +68,20 @@ class MainWindow(QMainWindow):
             f"{n} template{'s' if n != 1 else ''} loaded from {folder}"
         )
 
-    # ── Guide ─────────────────────────────────────────────────────────────────
+    # ── Guide folder ──────────────────────────────────────────────────────────
 
-    def _load_guide(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select guide template", "", "HTML files (*.html)"
+    def _load_guide_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select folder with guide templates")
+        if not folder:
+            return
+        folder_path = Path(folder)
+        self._guide_paths = sorted(folder_path.rglob("*.html"))
+        n = len(self._guide_paths)
+        self._topbar.set_guide(folder_path.name, n)
+        self._preview.set_guide_paths(self._guide_paths)
+        self.statusBar().showMessage(
+            f"{n} guide template{'s' if n != 1 else ''} loaded from {folder_path}"
         )
-        if path:
-            self._guide_path = Path(path)
-            self._topbar.set_guide(self._guide_path.name)
-            self._preview.set_guide_path(self._guide_path)
-            self.statusBar().showMessage(f"Guide loaded: {self._guide_path}")
 
     # ── Template selection ────────────────────────────────────────────────────
 
@@ -121,8 +124,10 @@ class MainWindow(QMainWindow):
 
     # ── Merge ─────────────────────────────────────────────────────────────────
 
-    def _open_merge_dialog(self, source_path: Path, guide_path: Path) -> None:
-        dlg = MergeDialog(source_path, guide_path, parent=self)
+    def _open_merge_dialog(self, source_path: Path, guide_paths: list) -> None:
+        if not guide_paths:
+            return
+        dlg = MergeDialog(source_path, guide_paths, parent=self)
         dlg.merged.connect(self._on_merged)
         dlg.exec()
 

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guide Template</title>
+  <style>
+    body { margin:0; padding:0; background:#f4f6f9; font-family:Arial,sans-serif; }
+    a    { color:red; }
+  </style>
+</head>
+<body>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+  <tr>
+    <td align="center">
+      <table width="620" cellpadding="0" cellspacing="0"
+             style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+
+
+        <!-- SECTION:HEADER -->
+        <tr>
+          <td style="background:#4f46e5;padding:32px 40px;text-align:center;">
+            <img src="https://placehold.co/160x40/ffffff/4f46e5?text=LOGO"
+                 alt="Company Logo" width="160" style="display:block;margin:0 auto 16px;" />
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.3px;">
+              Τίτλος Email
+            </h1>
+            <p style="margin:8px 0 0;color:#c7d2fe;font-size:13px;">
+              Προαιρετικός υπότιτλος ή ημερομηνία
+            </p>
+          </td>
+        </tr>
+        <!-- /SECTION:HEADER -->
+
+
+        <!-- SECTION:CONTENT -->
+        <tr>
+          <td style="padding:40px;">
+
+            <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.7;">
+              Αγαπητέ/ή <strong>{{first_name}}</strong>,
+            </p>
+
+            <p style="margin:0 0 16px;font-size:16px;color:#374151;line-height:1.7;">
+              Αυτό είναι το κύριο κείμενο του email. Αντικαταστήστε αυτήν την παράγραφο με
+              το πραγματικό σας μήνυμα. Κρατήστε τις προτάσεις σύντομες και κατανοητές.
+            </p>
+
+            <p style="margin:0 0 24px;font-size:16px;color:#374151;line-height:1.7;">
+              Μια δεύτερη παράγραφος μπορεί να επεκτείνει την ιδέα ή να παρέχει
+              επιπλέον πλαίσιο. Στοχεύστε σε δύο έως τρεις παραγράφους πριν από την
+              κύρια ενέργεια.
+            </p>
+
+            <!-- Κύρια ενέργεια -->
+            <table cellpadding="0" cellspacing="0" style="margin:0 0 32px;">
+              <tr>
+                <td style="background:#4f46e5;border-radius:6px;">
+                  <a href="{{cta_url}}"
+                     style="display:inline-block;padding:14px 28px;color:#ffffff;
+                            font-size:15px;font-weight:bold;text-decoration:none;">
+                    Κύρια Ενέργεια →
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Επισήμανση / callout -->
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#f5f3ff;border-left:4px solid #4f46e5;
+                          border-radius:0 6px 6px 0;margin-bottom:32px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <p style="margin:0 0 4px;font-size:13px;font-weight:bold;color:#4f46e5;">
+                    Επισήμανση ή σημαντική πληροφορία
+                  </p>
+                  <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">
+                    Χρησιμοποιήστε αυτό το πλαίσιο για να αναδείξετε ένα βασικό στοιχείο,
+                    μια παραπομπή ή μια δευτερεύουσα ενέργεια.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:15px;color:#374151;line-height:1.7;">
+              Με εκτίμηση,<br />
+              <strong>Η Ομάδα της Acme</strong>
+            </p>
+
+          </td>
+        </tr>
+        <!-- /SECTION:CONTENT -->
+
+
+        <!-- SECTION:PREFOOTER -->
+        <tr>
+          <td style="background:#f9fafb;padding:24px 40px;border-top:1px solid #e5e7eb;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:13px;color:#6b7280;line-height:1.6;">
+                  <strong style="color:#374151;">Γιατί λαμβάνω αυτό το email;</strong><br />
+                  Λαμβάνετε αυτό το email επειδή εγγραφήκατε για ενημερώσεις από την Acme Inc.
+                  Μπορείτε να διαχειριστείτε τις προτιμήσεις σας παρακάτω.
+                </td>
+                <td align="right" valign="top" style="white-space:nowrap;padding-left:24px;">
+                  <a href="{{preferences_url}}"
+                     style="font-size:12px;color:#6b7280;text-decoration:underline;">
+                    Διαχείριση προτιμήσεων
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- /SECTION:PREFOOTER -->
+
+
+        <!-- SECTION:FOOTER -->
+        <tr>
+          <td style="background:#1e1f22;padding:24px 40px;text-align:center;border-radius:0 0 8px 8px;">
+            <p style="margin:0 0 12px;">
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Πολιτική Απορρήτου</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Όροι Χρήσης</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Επικοινωνία</a>
+            </p>
+            <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">
+              Acme Inc. · Λεωφόρος Αθηνών 123 · Αθήνα, 10431
+            </p>
+            <p style="margin:0;font-size:12px;color:#6b7280;">
+              © 2026 Acme Inc. Όλα τα δικαιώματα διατηρούνται. ·
+              <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;">Κατάργηση εγγραφής</a>
+            </p>
+          </td>
+        </tr>
+        <!-- /SECTION:FOOTER -->
+
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

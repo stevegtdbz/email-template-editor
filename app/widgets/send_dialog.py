@@ -5,8 +5,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from app import styles
-from app.email_sender import SmtpConfig, SendWorker, OUTLOOK_AVAILABLE, load_last_to, save_last_to
+from app.email_sender import (
+    SmtpConfig, SendWorker, OUTLOOK_AVAILABLE,
+    load_last_to, save_last_to,
+    load_last_via, save_last_via,
+)
 from app.widgets.smtp_settings_dialog import SmtpSettingsDialog
+from app.widgets.multi_email_input import MultiEmailInput
 
 
 class SendDialog(QDialog):
@@ -14,10 +19,10 @@ class SendDialog(QDialog):
         super().__init__(parent)
         self._source_path = source_path
         self._config      = SmtpConfig.load()
-        self._worker:  SendWorker | None = None
+        self._worker: SendWorker | None = None
 
         self.setWindowTitle(f"Send  ·  {source_path.name}")
-        self.setFixedWidth(540)
+        self.setFixedWidth(560)
         self.setStyleSheet(f"background:{styles.BG_MID}; color:#e5e7eb;")
         self._setup_ui()
 
@@ -26,7 +31,7 @@ class SendDialog(QDialog):
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
-        root.setSpacing(16)
+        root.setSpacing(14)
 
         # Title + file chip
         title_row = QHBoxLayout()
@@ -48,33 +53,40 @@ class SendDialog(QDialog):
         line.setStyleSheet("color:#3c3f41;")
         root.addWidget(line)
 
-        # Form
-        field_style = (
+        # ── Recipients (chip inputs) ──────────────────────────────────────────
+        lbl_style = "color:#9ca3af; font-size:12px; font-weight:bold; letter-spacing:.5px;"
+
+        to_lbl = QLabel("TO")
+        to_lbl.setStyleSheet(lbl_style)
+        root.addWidget(to_lbl)
+
+        self._to = MultiEmailInput("recipient@example.com — press Enter or comma to add")
+        self._to.set_from_text(load_last_to())
+        root.addWidget(self._to)
+
+        cc_lbl = QLabel("CC  (optional)")
+        cc_lbl.setStyleSheet(lbl_style)
+        root.addWidget(cc_lbl)
+
+        self._cc = MultiEmailInput("cc@example.com")
+        root.addWidget(self._cc)
+
+        # ── Subject ───────────────────────────────────────────────────────────
+        subj_lbl = QLabel("SUBJECT")
+        subj_lbl.setStyleSheet(lbl_style)
+        root.addWidget(subj_lbl)
+
+        default_subject = (
+            self._source_path.stem.replace("-", " ").replace("_", " ").title()
+        )
+        self._subject = QLineEdit(default_subject)
+        self._subject.setStyleSheet(
             "background:#1e1f22; color:#e5e7eb; border:1px solid #3c3f41;"
             " border-radius:4px; padding:6px 10px; font-size:13px;"
         )
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setSpacing(10)
+        root.addWidget(self._subject)
 
-        self._to = QLineEdit(load_last_to())
-        self._to.setPlaceholderText("recipient@example.com, another@example.com")
-        self._to.setStyleSheet(field_style)
-        form.addRow("To:", self._to)
-
-        self._cc = QLineEdit()
-        self._cc.setPlaceholderText("cc@example.com  (optional)")
-        self._cc.setStyleSheet(field_style)
-        form.addRow("CC:", self._cc)
-
-        default_subject = self._source_path.stem.replace("-", " ").replace("_", " ").title()
-        self._subject = QLineEdit(default_subject)
-        self._subject.setStyleSheet(field_style)
-        form.addRow("Subject:", self._subject)
-
-        root.addLayout(form)
-
-        # Via row
+        # ── Via row ───────────────────────────────────────────────────────────
         via_row = QHBoxLayout()
         via_row.setSpacing(10)
 
@@ -83,13 +95,30 @@ class SendDialog(QDialog):
         via_row.addWidget(via_label)
 
         self._via = QComboBox()
-        self._via.setStyleSheet(
-            "background:#1e1f22; color:#e5e7eb; border:1px solid #3c3f41;"
-            " border-radius:4px; padding:4px 8px; font-size:13px;"
-        )
-        self._via.addItem("SMTP", "smtp")
+        self._via.setStyleSheet("""
+            QComboBox {
+                background:#1e1f22; color:#e5e7eb;
+                border:1px solid #3c3f41; border-radius:4px;
+                padding:4px 8px; font-size:13px; min-width:130px;
+            }
+            QComboBox::drop-down { border:none; width:18px; }
+            QComboBox QAbstractItemView {
+                background:#1e2433; color:#e5e7eb;
+                selection-background-color:#374151;
+                border:1px solid #3c3f41;
+            }
+        """)
+        self._via.addItem("Custom SMTP", "smtp")
         if OUTLOOK_AVAILABLE:
             self._via.addItem("Outlook (COM)", "outlook")
+
+        # Restore last-used selection
+        last_via = load_last_via()
+        for i in range(self._via.count()):
+            if self._via.itemData(i) == last_via:
+                self._via.setCurrentIndex(i)
+                break
+
         self._via.currentIndexChanged.connect(self._on_via_changed)
         via_row.addWidget(self._via)
 
@@ -105,11 +134,14 @@ class SendDialog(QDialog):
         via_row.addStretch()
         root.addLayout(via_row)
 
-        # From label (shows configured sender)
+        # From label
         self._from_label = QLabel()
         self._from_label.setStyleSheet("color:#6b7280; font-size:11px;")
         root.addWidget(self._from_label)
         self._refresh_from_label()
+
+        # Trigger visibility update for initial via value
+        self._on_via_changed(self._via.currentIndex())
 
         # Status
         self._status = QLabel("")
@@ -148,6 +180,7 @@ class SendDialog(QDialog):
     def _refresh_from_label(self) -> None:
         if self._config.is_configured:
             self._from_label.setText(f"From: {self._config.from_address}")
+            self._from_label.setStyleSheet("font-size:11px; color:#6b7280;")
         else:
             self._from_label.setText("⚠  SMTP not configured — click 'Configure SMTP…'")
             self._from_label.setStyleSheet("font-size:11px; color:#f87171;")
@@ -163,13 +196,10 @@ class SendDialog(QDialog):
             self._config = SmtpConfig.load()
             self._refresh_from_label()
 
-    def _parse_emails(self, text: str) -> list[str]:
-        return [e.strip() for e in text.replace(";", ",").split(",") if e.strip()]
-
     # ── Send ──────────────────────────────────────────────────────────────────
 
     def _send(self) -> None:
-        to = self._parse_emails(self._to.text())
+        to = self._to.get_emails()
         if not to:
             self._set_status("Please enter at least one recipient.", error=True)
             return
@@ -180,11 +210,13 @@ class SendDialog(QDialog):
             return
 
         html = self._source_path.read_text(encoding="utf-8")
-        cc   = self._parse_emails(self._cc.text())
-
+        cc   = self._cc.get_emails()
+        n    = len(to)
         self._send_btn.setEnabled(False)
         self._send_btn.setText("Sending…")
-        self._set_status("Connecting and sending…", error=False)
+        self._set_status(
+            f"Sending to {n} recipient{'s' if n != 1 else ''}…", error=False
+        )
 
         self._worker = SendWorker(
             method    = method,
@@ -200,8 +232,13 @@ class SendDialog(QDialog):
         self._worker.start()
 
     def _on_success(self) -> None:
-        save_last_to(self._to.text().strip())
-        self._set_status("Email sent successfully ✓", error=False, color="#34d399")
+        save_last_to(self._to.get_text())
+        save_last_via(self._via.currentData())
+        n = len(self._to.get_emails())
+        self._set_status(
+            f"Sent to {n} recipient{'s' if n != 1 else ''} ✓",
+            error=False, color="#34d399",
+        )
         self._send_btn.setText("Sent ✓")
 
     def _on_error(self, msg: str) -> None:

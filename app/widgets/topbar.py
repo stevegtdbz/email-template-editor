@@ -4,8 +4,8 @@ from app import styles
 
 
 class TopBar(QWidget):
-    open_folder_requested = pyqtSignal()
-    load_guide_requested  = pyqtSignal()
+    open_folder_requested       = pyqtSignal()
+    load_guide_folder_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,7 +28,7 @@ class TopBar(QWidget):
         self._guide_label.setStyleSheet(f"color:#6b7280; font-size:12px;")
         layout.addWidget(self._guide_label)
 
-        guide_btn = QPushButton("Load Guide…")
+        guide_btn = QPushButton("Guide Folder…")
         guide_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         guide_btn.setStyleSheet("""
             QPushButton {
@@ -39,7 +39,7 @@ class TopBar(QWidget):
             QPushButton:hover  { background:#1e40af; color:white; }
             QPushButton:pressed{ background:#1d4ed8; }
         """)
-        guide_btn.clicked.connect(self.load_guide_requested)
+        guide_btn.clicked.connect(self.load_guide_folder_requested)
         layout.addWidget(guide_btn)
 
         open_btn = QPushButton("Open Folder…")
@@ -59,6 +59,7 @@ class TopBar(QWidget):
     def set_path(self, path: str) -> None:
         self._path_label.setText(path)
 
-    def set_guide(self, name: str) -> None:
-        self._guide_label.setText(f"Guide: {name}")
+    def set_guide(self, name: str, count: int = 0) -> None:
+        suffix = f"  ({count} guides)" if count else ""
+        self._guide_label.setText(f"Guide folder: {name}{suffix}")
         self._guide_label.setStyleSheet("color:#93c5fd; font-size:12px;")
