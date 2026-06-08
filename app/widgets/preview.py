@@ -53,11 +53,13 @@ _EDIT_JS = """
         '.__em_sel{outline:2px solid rgba(220,38,38,.9)!important;outline-offset:2px!important;}';
     document.head.appendChild(style);
 
-    document.body.contentEditable = 'true';
     var selected = null;
     var lastHov  = null;
     var __seq    = 0;
     window.__em_state = null;
+
+    // Tags whose default actions must be suppressed in edit mode
+    var BLOCK_DEFAULT = {A:1, BUTTON:1, INPUT:1, SELECT:1, TEXTAREA:1, LABEL:1, FORM:1};
 
     function setSelected(el) {
         if (selected) selected.classList.remove('__em_sel');
@@ -95,12 +97,16 @@ _EDIT_JS = """
     document.addEventListener('mousedown', function (e) {
         var tag = e.target.tagName;
         if (tag === 'BODY' || tag === 'HTML') return;
-        e.preventDefault();
-        e.stopPropagation();
         if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            e.stopPropagation();
             if (selected === e.target) setSelected(null);
             e.target.remove();
         } else {
+            if (BLOCK_DEFAULT[tag]) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             setSelected(e.target);
         }
     }, true);
@@ -191,7 +197,6 @@ _EDIT_JS = """
 _CLEANUP_JS = """
 (function () {
     var s = document.getElementById('__em_style__'); if (s) s.remove();
-    document.body.removeAttribute('contenteditable');
     document.querySelectorAll('.__em_hov,.__em_sel').forEach(function (el) {
         el.classList.remove('__em_hov', '__em_sel');
     });
@@ -436,19 +441,19 @@ class PreviewPane(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # ── Header: tag + deselect ────────────────────────────────────────────
+        # ── Header: title row ─────────────────────────────────────────────────
         hdr = QWidget()
-        hdr.setFixedHeight(38)
-        hdr.setStyleSheet("background:#25272b; border-bottom:1px solid #3c3f41;")
+        hdr.setFixedHeight(34)
+        hdr.setStyleSheet("background:#25272b;")
         hl = QHBoxLayout(hdr)
         hl.setContentsMargins(12, 0, 8, 0)
 
-        self._elem_tag_label = QLabel("Element Editor")
-        self._elem_tag_label.setStyleSheet(
-            "color:#6b7280; font-size:13px; font-family:monospace; font-weight:bold;"
+        title_lbl = QLabel("ELEMENT EDITOR")
+        title_lbl.setStyleSheet(
+            "color:#4b5563; font-size:10px; font-weight:bold; letter-spacing:1px;"
             " background:#25272b;"
         )
-        hl.addWidget(self._elem_tag_label)
+        hl.addWidget(title_lbl)
         hl.addStretch()
 
         desel_btn = QPushButton("✕")
@@ -462,6 +467,31 @@ class PreviewPane(QWidget):
         desel_btn.clicked.connect(self._deselect_element)
         hl.addWidget(desel_btn)
         outer.addWidget(hdr)
+
+        # ── Tag label row (hidden until element selected) ─────────────────────
+        self._tag_row = QWidget()
+        self._tag_row.setFixedHeight(36)
+        self._tag_row.setStyleSheet(
+            "background:#1e1f22; border-bottom:1px solid #3c3f41;"
+        )
+        trl = QHBoxLayout(self._tag_row)
+        trl.setContentsMargins(14, 0, 14, 0)
+
+        tag_prefix = QLabel("element:")
+        tag_prefix.setStyleSheet(
+            "color:#4b5563; font-size:11px; background:#1e1f22;"
+        )
+        trl.addWidget(tag_prefix)
+
+        self._elem_tag_label = QLabel("")
+        self._elem_tag_label.setStyleSheet(
+            "color:#a5b4fc; font-size:14px; font-family:monospace;"
+            " font-weight:bold; background:#1e1f22; padding-left:6px;"
+        )
+        trl.addWidget(self._elem_tag_label)
+        trl.addStretch()
+        self._tag_row.setVisible(False)
+        outer.addWidget(self._tag_row)
 
         # ── Scrollable body ───────────────────────────────────────────────────
         scroll = QScrollArea()
@@ -931,12 +961,8 @@ class PreviewPane(QWidget):
         )
 
     def _show_element_style(self, tag: str, style: str, classes: list, attrs: list) -> None:
-        self._elem_tag_label.setText(f"<{tag}>")
-        self._elem_tag_label.setStyleSheet(
-            "color:#93c5fd; background:#1e3a5f; font-size:12px; font-family:monospace;"
-            " font-weight:bold; border:1px solid #2563eb; border-radius:4px;"
-            " padding:2px 8px;"
-        )
+        self._elem_tag_label.setText(tag)
+        self._tag_row.setVisible(True)
         # Normalize style: collapse newlines / extra whitespace
         style_norm = '; '.join(
             p.strip() for p in style.replace('\n', ' ').split(';') if p.strip()
@@ -957,11 +983,8 @@ class PreviewPane(QWidget):
         self._elem_action_row.setVisible(True)
 
     def _reset_tag_label(self) -> None:
-        self._reset_tag_label()
-        self._elem_tag_label.setStyleSheet(
-            "color:#6b7280; font-size:13px; font-family:monospace; font-weight:bold;"
-            " background:#25272b;"
-        )
+        self._tag_row.setVisible(False)
+        self._elem_tag_label.setText("")
 
     def _deselect_element(self) -> None:
         self._attrs_section.setVisible(False)

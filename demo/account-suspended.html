@@ -1,31 +1,40 @@
-<html lang="en" class=""><head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>__dirty__</title>
-<style id="__emc_hero__">.hero { font-size:34px; color: red; }
-@media (max-width: 800px) { .hero { color: blue!important; } }</style></head>
-<body style="margin:0;padding:0;background-color:#fef2f2;font-family:Arial,Helvetica,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fef2f2;">
-  <tbody><tr>
-    <td align="center" style="padding:40px 20px;" class="">
-      <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guide Template</title>
+  <style>
+    body { margin:0; padding:0; background:#f4f6f9; font-family:Arial,sans-serif; }
+    a    { color:red; }
+  </style>
+</head>
+<body>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+  <tr>
+    <td align="center">
+      <table width="620" cellpadding="0" cellspacing="0"
+             style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 
-        <!-- Header -->
-        <tbody><tr>
-          <td style="background-color:#111827;padding:28px 40px;text-align:center;" class="">
-            <p style="margin:0;font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;" class="">Vault<span style="color:#ef4444;">App</span></p>
+
+        <!-- SECTION:HEADER -->
+        <tr>
+          <td style="background:#4f46e5;padding:32px 40px;text-align:center;">
+            <img src="https://placehold.co/160x40/ffffff/4f46e5?text=LOGO"
+                 alt="Company Logo" width="160" style="display:block;margin:0 auto 16px;" />
+            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.3px;">
+              Τίτλος Email
+            </h1>
+            <p style="margin:8px 0 0;color:#c7d2fe;font-size:13px;">
+              Προαιρετικός υπότιτλος ή ημερομηνία
+            </p>
           </td>
         </tr>
+        <!-- /SECTION:HEADER -->
 
-        <!-- Warning banner -->
-        <tr>
-          <td style="background-color:#dc2626;padding:20px 40px;text-align:center;" class="">
-            <p style="margin:0;font-size:14px;color:#ffffff;font-weight:700;text-transform:uppercase;letter-spacing:1px;" class="">⚠️ Account Suspended</p>
-          </td>
-        </tr>
 
-        <!-- Body -->
-        <tr>
+        <!-- SECTION:CONTENT -->
+<tr class="">
           <td style="padding:40px 40px 32px;" class="">
             <p class="hero">Hi <strong style="color:#111827;" class="">{{first_name}}</strong>,</p>
             <p class="hero">Your VaultApp account has been temporarily suspended. This action was taken because:</p>
@@ -81,19 +90,55 @@
             <p style="margin:0;text-align:center;font-size:12px;color:#9ca3af;">Case reference: <strong style="color:#6b7280;">{{case_id}}</strong> · Suspended on {{suspension_date}}</p>
           </td>
         </tr>
+        <!-- /SECTION:CONTENT -->
 
-        <!-- Footer -->
+
+        <!-- SECTION:PREFOOTER -->
         <tr>
-          <td style="background-color:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 40px;text-align:center;">
-            <p style="margin:0 0 6px;font-size:12px;color:#9ca3af;">Need immediate help? <a href="#" style="color:#dc2626;text-decoration:none;font-weight:600;">Contact Trust &amp; Safety</a></p>
-            <p style="margin:0;font-size:11px;color:#d1d5db;">© 2026 VaultApp · This is an automated message · <a href="#" style="color:#d1d5db;text-decoration:none;">Unsubscribe</a></p>
+          <td style="background:#f9fafb;padding:24px 40px;border-top:1px solid #e5e7eb;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:13px;color:#6b7280;line-height:1.6;">
+                  <strong style="color:#374151;">Γιατί λαμβάνω αυτό το email;</strong><br />
+                  Λαμβάνετε αυτό το email επειδή εγγραφήκατε για ενημερώσεις από την Acme Inc.
+                  Μπορείτε να διαχειριστείτε τις προτιμήσεις σας παρακάτω.
+                </td>
+                <td align="right" valign="top" style="white-space:nowrap;padding-left:24px;">
+                  <a href="{{preferences_url}}"
+                     style="font-size:12px;color:#6b7280;text-decoration:underline;">
+                    Διαχείριση προτιμήσεων
+                  </a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
+        <!-- /SECTION:PREFOOTER -->
 
-      </tbody></table>
+
+        <!-- SECTION:FOOTER -->
+        <tr>
+          <td style="background:#1e1f22;padding:24px 40px;text-align:center;border-radius:0 0 8px 8px;">
+            <p style="margin:0 0 12px;">
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Πολιτική Απορρήτου</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Όροι Χρήσης</a>
+              <a href="#" style="color:#9ca3af;font-size:12px;text-decoration:none;margin:0 8px;">Επικοινωνία</a>
+            </p>
+            <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">
+              Acme Inc. · Λεωφόρος Αθηνών 123 · Αθήνα, 10431
+            </p>
+            <p style="margin:0;font-size:12px;color:#6b7280;">
+              © 2026 Acme Inc. Όλα τα δικαιώματα διατηρούνται. ·
+              <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;">Κατάργηση εγγραφής</a>
+            </p>
+          </td>
+        </tr>
+        <!-- /SECTION:FOOTER -->
+
+
+      </table>
     </td>
   </tr>
-</tbody></table>
-
-
-</body></html>
+</table>
+</body>
+</html>
