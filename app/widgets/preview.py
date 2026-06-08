@@ -95,8 +95,9 @@ _EDIT_JS = """
     document.addEventListener('mousedown', function (e) {
         var tag = e.target.tagName;
         if (tag === 'BODY' || tag === 'HTML') return;
+        e.preventDefault();
+        e.stopPropagation();
         if (e.ctrlKey || e.metaKey) {
-            e.preventDefault(); e.stopPropagation();
             if (selected === e.target) setSelected(null);
             e.target.remove();
         } else {
@@ -115,12 +116,24 @@ _EDIT_JS = """
     // fullCss is the complete CSS block (base rule + @media rules), built by Python.
     // The <style> tag is saved with the file; only the class attribute is toggled.
     // Returns true if added, false if removed, null if no element is selected.
+    // Outlook restriction: only ONE managed class per element — any previously
+    // applied managed class (identified by its __emc_ style tag) is removed first.
     window.__toggleClass = function (className, fullCss) {
         if (!selected) return null;
         if (selected.classList.contains(className)) {
             selected.classList.remove(className);
             return false;
         }
+        // Remove any other managed class already on the element
+        var existing = Array.from(selected.classList);
+        for (var i = 0; i < existing.length; i++) {
+            var cls = existing[i];
+            if (cls !== '__em_hov' && cls !== '__em_sel' &&
+                    document.getElementById('__emc_' + cls + '__')) {
+                selected.classList.remove(cls);
+            }
+        }
+        // Inject CSS and apply the new class
         var sid = '__emc_' + className + '__';
         var sEl = document.getElementById(sid);
         if (!sEl) {
@@ -432,8 +445,8 @@ class PreviewPane(QWidget):
 
         self._elem_tag_label = QLabel("Element Editor")
         self._elem_tag_label.setStyleSheet(
-            "color:#a5b4fc; font-size:13px; font-family:monospace; font-weight:bold;"
-            "background:#25272b;"
+            "color:#6b7280; font-size:13px; font-family:monospace; font-weight:bold;"
+            " background:#25272b;"
         )
         hl.addWidget(self._elem_tag_label)
         hl.addStretch()
@@ -749,7 +762,7 @@ class PreviewPane(QWidget):
         self._ai_status.setVisible(False)
         self._sidebar_divider.setVisible(False)
         self._elem_action_row.setVisible(False)
-        self._elem_tag_label.setText("Element Editor")
+        self._reset_tag_label()
         if self._code_mode:
             self._code_editor.setPlainText(path.read_text(encoding="utf-8"))
         else:
@@ -846,7 +859,7 @@ class PreviewPane(QWidget):
         self._edit_mode = enabled
         self._save_btn.setVisible(enabled or self._code_mode)
         if enabled:
-            self._elem_tag_label.setText("Element Editor")
+            self._reset_tag_label()
             self._attrs_section.setVisible(False)
             self._inline_style_section.setVisible(False)
             self._ai_section.setVisible(False)
@@ -897,7 +910,7 @@ class PreviewPane(QWidget):
                 self._ai_status.setVisible(False)
                 self._sidebar_divider.setVisible(False)
                 self._elem_action_row.setVisible(False)
-                self._elem_tag_label.setText("Element Editor")
+                self._reset_tag_label()
                 self._current_elem_classes.clear()
                 self._refresh_css_classes()
             self._last_em_seq = -1
@@ -919,8 +932,19 @@ class PreviewPane(QWidget):
 
     def _show_element_style(self, tag: str, style: str, classes: list, attrs: list) -> None:
         self._elem_tag_label.setText(f"<{tag}>")
+        self._elem_tag_label.setStyleSheet(
+            "color:#93c5fd; background:#1e3a5f; font-size:12px; font-family:monospace;"
+            " font-weight:bold; border:1px solid #2563eb; border-radius:4px;"
+            " padding:2px 8px;"
+        )
+        # Normalize style: collapse newlines / extra whitespace
+        style_norm = '; '.join(
+            p.strip() for p in style.replace('\n', ' ').split(';') if p.strip()
+        )
+        if style_norm and not style_norm.endswith(';'):
+            style_norm += ';'
         self._inline_style_editor.blockSignals(True)
-        self._inline_style_editor.setPlainText(style)
+        self._inline_style_editor.setPlainText(style_norm)
         self._inline_style_editor.blockSignals(False)
         self._current_elem_classes = set(classes)
         self._refresh_attributes(attrs)
@@ -932,6 +956,13 @@ class PreviewPane(QWidget):
         self._sidebar_divider.setVisible(True)
         self._elem_action_row.setVisible(True)
 
+    def _reset_tag_label(self) -> None:
+        self._reset_tag_label()
+        self._elem_tag_label.setStyleSheet(
+            "color:#6b7280; font-size:13px; font-family:monospace; font-weight:bold;"
+            " background:#25272b;"
+        )
+
     def _deselect_element(self) -> None:
         self._attrs_section.setVisible(False)
         self._inline_style_section.setVisible(False)
@@ -939,7 +970,7 @@ class PreviewPane(QWidget):
         self._ai_status.setVisible(False)
         self._sidebar_divider.setVisible(False)
         self._elem_action_row.setVisible(False)
-        self._elem_tag_label.setText("Element Editor")
+        self._reset_tag_label()
         self._current_elem_classes.clear()
         self._refresh_css_classes()
         self._last_em_seq = -1
@@ -993,7 +1024,10 @@ class PreviewPane(QWidget):
     # ── Live style push ───────────────────────────────────────────────────────
 
     def _push_style_to_element(self) -> None:
-        css = self._inline_style_editor.toPlainText()
+        raw = self._inline_style_editor.toPlainText()
+        css = '; '.join(p.strip() for p in raw.replace('\n', ' ').split(';') if p.strip())
+        if css and not css.endswith(';'):
+            css += ';'
         css_e = css.replace("\\", "\\\\").replace("'", "\\'")
         self._view.page().runJavaScript(
             f"window.__updateSelectedStyle && window.__updateSelectedStyle('{css_e}')"
@@ -1022,8 +1056,12 @@ class PreviewPane(QWidget):
             self._elem_sets_layout.addWidget(row)
 
     def _apply_style_set(self, css: str) -> None:
-        current = self._inline_style_editor.toPlainText().strip()
-        merged = _merge_css(current, css)
+        current = self._inline_style_editor.toPlainText().replace('\n', ' ').strip()
+        merged  = _merge_css(current, css)
+        # Normalize
+        merged = '; '.join(p.strip() for p in merged.split(';') if p.strip())
+        if merged and not merged.endswith(';'):
+            merged += ';'
         self._inline_style_editor.blockSignals(True)
         self._inline_style_editor.setPlainText(merged)
         self._inline_style_editor.blockSignals(False)
@@ -1139,6 +1177,12 @@ class PreviewPane(QWidget):
         if applied is None:
             return  # no element selected
         if applied:
+            # Enforce one-class-per-element: reset every other managed class button
+            for other, other_btn in self._class_buttons.items():
+                if other != name:
+                    self._current_elem_classes.discard(other)
+                    other_btn.setText(f".{other}")
+                    other_btn.setStyleSheet(_CLASS_BTN_OFF)
             self._current_elem_classes.add(name)
             btn.setText(f"✓ .{name}")
             btn.setStyleSheet(_CLASS_BTN_ON)
@@ -1289,7 +1333,7 @@ class PreviewPane(QWidget):
         self._ai_status.setVisible(False)
         self._sidebar_divider.setVisible(False)
         self._elem_action_row.setVisible(False)
-        self._elem_tag_label.setText("Element Editor")
+        self._reset_tag_label()
         self._current_elem_classes.clear()
         self._refresh_css_classes()
         self._last_em_seq = -1
