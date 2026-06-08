@@ -53,6 +53,7 @@ _EDIT_JS = """
         '.__em_sel{outline:2px solid rgba(220,38,38,.9)!important;outline-offset:2px!important;}';
     document.head.appendChild(style);
 
+    document.body.contentEditable = 'true';
     var selected = null;
     var lastHov  = null;
     var __seq    = 0;
@@ -130,12 +131,11 @@ _EDIT_JS = """
             selected.classList.remove(className);
             return false;
         }
-        // Remove any other managed class already on the element
+        // Remove ALL existing classes (Outlook: one class only); keep UI helpers
         var existing = Array.from(selected.classList);
         for (var i = 0; i < existing.length; i++) {
             var cls = existing[i];
-            if (cls !== '__em_hov' && cls !== '__em_sel' &&
-                    document.getElementById('__emc_' + cls + '__')) {
+            if (cls !== '__em_hov' && cls !== '__em_sel') {
                 selected.classList.remove(cls);
             }
         }
@@ -197,6 +197,7 @@ _EDIT_JS = """
 _CLEANUP_JS = """
 (function () {
     var s = document.getElementById('__em_style__'); if (s) s.remove();
+    document.body.removeAttribute('contenteditable');
     document.querySelectorAll('.__em_hov,.__em_sel').forEach(function (el) {
         el.classList.remove('__em_hov', '__em_sel');
     });
@@ -1200,10 +1201,10 @@ class PreviewPane(QWidget):
         if applied is None:
             return  # no element selected
         if applied:
-            # Enforce one-class-per-element: reset every other managed class button
+            # One class only: clear all tracked classes and reset every button
+            self._current_elem_classes.clear()
             for other, other_btn in self._class_buttons.items():
                 if other != name:
-                    self._current_elem_classes.discard(other)
                     other_btn.setText(f".{other}")
                     other_btn.setStyleSheet(_CLASS_BTN_OFF)
             self._current_elem_classes.add(name)
