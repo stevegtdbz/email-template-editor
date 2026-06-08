@@ -152,6 +152,12 @@ _EDIT_JS = """
         return true;
     };
 
+    window.__removeClass = function (className) {
+        if (!selected) return;
+        selected.classList.remove(className);
+        document.title = '__dirty__';
+    };
+
     window.__deleteSelected  = function () {
         if (selected) { selected.remove(); setSelected(null); }
     };
@@ -205,6 +211,7 @@ _CLEANUP_JS = """
     delete window.__em_state;
     delete window.__updateSelectedStyle;
     delete window.__toggleClass;
+    delete window.__removeClass;
     delete window.__deleteSelected;
     delete window.__deselectElement;
     delete window.__updateAttribute;
@@ -1133,14 +1140,66 @@ class PreviewPane(QWidget):
         self._class_buttons.clear()
         self._clear_layout(self._css_classes_layout)
 
+        elem_selected = self._inline_style_section.isVisible()
+
+        # ── Applied classes (all classes currently on the element) ────────────
+        if elem_selected and self._current_elem_classes:
+            applied_lbl = self._placeholder("Applied:")
+            applied_lbl.setStyleSheet("color:#6b7280; font-size:10px; font-weight:bold;"
+                                      " letter-spacing:1px;")
+            self._css_classes_layout.addWidget(applied_lbl)
+
+            chips_row = QWidget()
+            chips_row.setStyleSheet(f"background:{styles.BG_DARK};")
+            chips_lay = QHBoxLayout(chips_row)
+            chips_lay.setContentsMargins(0, 2, 0, 4)
+            chips_lay.setSpacing(4)
+
+            for cls_name in sorted(self._current_elem_classes):
+                chip = QWidget()
+                chip.setStyleSheet(
+                    "background:#1e3a5f; border:1px solid #2563eb; border-radius:4px;"
+                )
+                cl = QHBoxLayout(chip)
+                cl.setContentsMargins(6, 2, 2, 2)
+                cl.setSpacing(2)
+
+                lbl = QLabel(cls_name)
+                lbl.setStyleSheet(
+                    "color:#93c5fd; font-size:11px; font-family:monospace;"
+                    " background:#1e3a5f; border:none;"
+                )
+                cl.addWidget(lbl)
+
+                rm = QPushButton("✕")
+                rm.setFixedSize(16, 16)
+                rm.setCursor(Qt.CursorShape.PointingHandCursor)
+                rm.setToolTip(f"Remove class '{cls_name}' from element")
+                rm.setStyleSheet(
+                    "QPushButton{background:transparent;color:#60a5fa;"
+                    "border:none;font-size:10px;padding:0;}"
+                    "QPushButton:hover{color:#f87171;}"
+                )
+                rm.clicked.connect(
+                    lambda _, n=cls_name: self._remove_class_from_element(n)
+                )
+                cl.addWidget(rm)
+                chips_lay.addWidget(chip)
+
+            chips_lay.addStretch()
+            self._css_classes_layout.addWidget(chips_row)
+
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet("color:#3c3f41; margin:2px 0 4px 0;")
+            self._css_classes_layout.addWidget(sep)
+
         classes = style_store.load_classes()
         if not classes:
             self._css_classes_layout.addWidget(
                 self._placeholder("No classes yet — click + New")
             )
             return
-
-        elem_selected = self._inline_style_section.isVisible()
 
         for i, c in enumerate(classes):
             name = c["name"]
@@ -1214,6 +1273,16 @@ class PreviewPane(QWidget):
             self._current_elem_classes.discard(name)
             btn.setText(f".{name}")
             btn.setStyleSheet(_CLASS_BTN_OFF)
+
+    def _remove_class_from_element(self, name: str) -> None:
+        self._view.page().runJavaScript(
+            f"window.__removeClass && window.__removeClass({_json.dumps(name)})"
+        )
+        self._current_elem_classes.discard(name)
+        if name in self._class_buttons:
+            self._class_buttons[name].setText(f".{name}")
+            self._class_buttons[name].setStyleSheet(_CLASS_BTN_OFF)
+        self._refresh_css_classes()
 
     def _add_css_class(self) -> None:
         from app import style_store
